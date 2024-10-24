@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title='All Pools History Dashboard',layout='wide',initial_sidebar_state='expanded')
 
 
-df=pd.read_excel('C:/Users/PatrickMunyingi/all pools.xlsx')
+df=pd.read_excel('all pools.xlsx')
 df.fillna(0,inplace=True,axis=1)
 
 #Here we want to create our dashboard filters.
