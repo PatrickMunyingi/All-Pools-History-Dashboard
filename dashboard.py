@@ -14,9 +14,23 @@ df.fillna(0,inplace=True,axis=1)
 # The filters here will allow us to select the data that we want to vizualise.
 
 st.sidebar.header("Please Filter Here:")
-pool = st.sidebar.multiselect("Select the Pool:", options=df["Pool"].unique(), default=df["Pool"].unique())
-policy_type = st.sidebar.multiselect("Select the Policy Type:", options=df["Policy Type"].unique(), default=df["Policy Type"].unique())
-country=st.sidebar.multiselect("Select the prefered country",options=df["Country"].unique(),default=df['Country'].unique())
+pool = st.sidebar.multiselect(
+    "Select the Pool:", 
+    options=df["Pool"].unique(), 
+    default=df["Pool"].unique()if select_all_pools else []
+    )
+select_all_policy_types=st.sidebar.checkbox("Select All Policy Types",value=True)
+policy_type = st.sidebar.multiselect(
+    "Select the Policy Type:",
+    options=df["Policy Type"].unique(),
+    default=df["Policy Type"].unique()if select_all_policy_types else []
+    )
+select_all_countries=st.sidebar.checkbox("Select All Countries",value=True)
+country=st.sidebar.multiselect(
+    "Select the prefered country",
+    options=df["Country"].unique(),
+    default=df["Country"].unique()if select_all_countries else []
+    )
 
 df_selection = df.query('`Policy Type` == @policy_type and Pool == @pool and `Country`==@country')
 
