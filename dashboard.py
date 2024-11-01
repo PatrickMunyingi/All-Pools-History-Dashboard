@@ -14,6 +14,7 @@ df.fillna(0,inplace=True,axis=1)
 # The filters here will allow us to select the data that we want to vizualise.
 
 st.sidebar.header("Please Filter Here:")
+select_all_pools=st.sidebar.checkbox("Select All Pools",value=True)
 pool = st.sidebar.multiselect(
     "Select the Pool:", 
     options=df["Pool"].unique(), 
