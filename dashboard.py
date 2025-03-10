@@ -7,102 +7,103 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title='All Pools History Dashboard',layout='wide',initial_sidebar_state='expanded')
 
 
-df=pd.read_excel('all pools.xlsx')
-df.fillna(0,inplace=True,axis=1)
 
-#Here we want to create our dashboard filters.
-# The filters here will allow us to select the data that we want to vizualise.
+@st.cache_data
+def load_data():
+    return pd.read_excel('all pools.xlsx', usecols=None)  # Load only needed columns if applicable
 
-st.sidebar.header("Please Filter Here:")
-select_all_pools=st.sidebar.checkbox("Select All Pools",value=True)
-pool = st.sidebar.multiselect(
-    "Select the Pool:", 
-    options=df["Pool"].unique(), 
-    default=df["Pool"].unique()if select_all_pools else []
-    )
-select_all_policy_types=st.sidebar.checkbox("Select All Policy Types",value=True)
-policy_type = st.sidebar.multiselect(
-    "Select the Policy Type:",
-    options=df["Policy Type"].unique(),
-    default=df["Policy Type"].unique()if select_all_policy_types else []
-    )
-select_all_countries=st.sidebar.checkbox("Select All Countries",value=True)
-country=st.sidebar.multiselect(
-    "Select the prefered country",
-    options=df["Country"].unique(),
-    default=df["Country"].unique()if select_all_countries else []
-    )
+df = load_data()
 
-df_selection = df.query('`Policy Type` == @policy_type and Pool == @pool and `Country`==@country')
+# Ensure numerical columns are properly formatted
+numeric_cols = ['Premium', 'Attachment', 'Exhaustion', 'Coverage', 'Claims']
+df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
 
+# Sidebar Filters
+with st.sidebar.expander("Filters", expanded=True):
+    select_all_pools = st.checkbox("Select All Pools", value=True)
+    pool = st.multiselect("Select the Pool:", options=df["Pool"].unique(), default=df["Pool"].unique() if select_all_pools else [])
 
-##--MAINPAGE--
+    select_all_policy_types = st.checkbox("Select All Policy Types", value=True)
+    policy_type = st.multiselect("Select the Policy Type:", options=df["Policy Type"].unique(), default=df["Policy Type"].unique() if select_all_policy_types else [])
+
+    select_all_countries = st.checkbox("Select All Countries", value=True)
+    country = st.multiselect("Select the Preferred Country:", options=df["Country"].unique(), default=df["Country"].unique() if select_all_countries else [])
+
+    select_all_regions = st.checkbox("Select All Regions", value=True)
+    region = st.multiselect("Select Preferred Region:", options=df["Region"].unique(), default=df["Region"].unique() if select_all_regions else [])
+    
+    
+# Filtering
+df_selection = df[
+    df['Policy Type'].isin(policy_type) & 
+    df['Pool'].isin(pool) & 
+    df['Country'].isin(country) & 
+    df['Region'].isin(region)
+]
+
+# Main Page
 st.title("ALL POOLS HISTORY DASHBOARD")
 st.markdown('##')
-option=st.selectbox("What would you like to view?",('Premium and country basic Infomation','Premium financing and Tracker','Claim settlement history'),index=None,placeholder="Select What you would like to see")
 
-if option=="Premium and country basic Infomation":
+option = st.selectbox("What would you like to view?", 
+                      ("", "Premium and country basic Information", "Premium financing and Tracker", "Claim settlement history", "Re-Insurance Information"))
 
-        ## -----TOP KPI's-----
-    total_premium=int(df_selection['Premium'].sum())
-    total_attachment=int(df_selection['Attachment'].sum())
-    total_exhaustion=int(df_selection['Exhaustion'].sum())
-    total_coverage=int(df_selection['Coverage'].sum())
+if option == "Premium and country basic Information":
+    # KPI Calculations
+    total_premium = df_selection['Premium'].sum()
+    total_claims = df_selection['Claims'].sum()
+    total_coverage = df_selection['Coverage'].sum()
+    loss_ratio = (total_claims / total_premium) * 100 if total_premium > 0 else 0
 
-    left_column,middle_column,right_column,final_column=st.columns(4)# Defining the placement of the data cards with the attachment, exhaustion,coverage,etc
-    with left_column:
-        st.subheader("Total Premium")
-        st.subheader(f"US ${total_premium:,}")
-            
-            
-            
-            
-    with middle_column:
-        st.subheader("Attachment Point:")
-        st.subheader(f"US ${total_attachment:,}")
+ # Custom CSS for alignment
+    
 
 
 
 
+    # KPI Display
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Total Premium", f"US ${total_premium:,.0f}")
+    col2.metric("Loss Ratio", f"{loss_ratio:.2f}%")
+    col3.metric("Total Coverage", f"US ${total_coverage:,.0f}")
+    col4.metric("Total Claims", f"US ${total_claims:,.0f}")
 
-    with right_column:
-        st.subheader("'Total exhaustion")
-        st.subheader(f"US ${total_exhaustion:,}")
-            
+    # Charts
+    col1, col2, col3 = st.columns(3)
 
+    with col1:
+        if 'Policy Years' in df_selection.columns and not df_selection.empty:
+            yearly_premium = df_selection.groupby('Policy Years')['Premium'].sum().reset_index()
+            plot1 = px.line(yearly_premium, x='Policy Years', y='Premium', markers=True, 
+                            title='Yearly Pool Progression of Premiums', template='plotly_white', color_discrete_sequence=["#305D26"])
+            st.plotly_chart(plot1)
+        else:
+            st.warning("No available data for Policy Years.")
 
+    with col2:
+        if 'Country' in df_selection.columns and not df_selection.empty:
+            country_count = df_selection['Country'].value_counts().reset_index()
+            country_count.columns = ['Country', 'Count']
+            plot2 = px.bar(country_count, x='Count', y='Country', orientation='h', title="Country Count")
+            st.plotly_chart(plot2)
+        else:
+            st.warning("No country data available.")
 
-    with final_column:
-        st.subheader("'Total Coverage")
-        st.subheader(f"US ${total_coverage:,}")
+    with col3:
+        if 'Policy Type' in df_selection.columns and not df_selection.empty:
+            policy_type_counts = df_selection['Policy Type'].value_counts().reset_index()
+            policy_type_counts.columns = ['Policy Type', 'Count']
+            pie_chart = px.pie(policy_type_counts, names='Policy Type', values='Count', hole=0.6, title="Policy Type Distribution",color_discrete_sequence=["#FF9999", "#99CCFF"])
+            st.plotly_chart(pie_chart)
+        else:
+            st.warning("No policy type data available.")
 
+    # Display Filtered Data Table
+    if not df_selection.empty:
+        st.write(f"Showing {len(df_selection)} records.")
+        st.dataframe(df_selection)
+    else:
+        st.warning("No data available for the selected filters.")
 
-
-
-
-    coluumn_a,column_b,column_c=st.columns(3)
-    with coluumn_a:
-            ## Yearly progression--
-        plot1=plt.figure(figsize=(7,7))
-        plot1=px.line(df_selection.groupby('Policy Years')['Premium'].sum(),markers=True,title='Yearly Pool progression of premiums',template='plotly_white')
-        st.plotly_chart(plot1)
-    with column_b:
-            ## Country count
-        plot2=plt.figure(figsize=(5,6))
-        plot2=px.bar(df_selection.groupby('Country')['Country'].count(),orientation='h')
-        st.plotly_chart(plot2)
-
-    with column_c:
-        policy_type_counts = df_selection['Policy Type'].value_counts().reset_index()
-
-            # Rename the columns to match Plotly Express expectations
-        policy_type_counts.columns = ['Policy Type', 'Count']
-
-            # Create the pie chart using Plotly Express
-        fig=plt.figure(figsize=(5,5))
-        fig = px.pie(policy_type_counts, names='Policy Type', values='Count', hole=0.6)
-        st.plotly_chart(fig)
 else:
-    print("Select an option please")
-    
-    
+    st.warning("Select an option to view data.")
