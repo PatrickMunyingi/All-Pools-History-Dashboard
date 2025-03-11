@@ -40,9 +40,8 @@ df_selection = df[
     df['Policy Type'].isin(policy_type) & 
     df['Pool'].isin(pool) & 
     df['Country'].isin(country) & 
-    df['Region'].isin(region)&
-    df['Peril'].isin(peril)
-    
+    df['Peril'].isin(peril) &
+    df['Region'].isin(region)
 ]
 
 # Main Page
