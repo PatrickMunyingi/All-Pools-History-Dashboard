@@ -61,6 +61,28 @@ if option == "Premium and country basic Information":
 
  # Custom CSS for alignment
     
+     # Custom CSS for alignment
+    st.markdown(
+    """
+    <style>
+    div[data-testid="metric-container"] {
+        text-align: center !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    div[data-testid="stMetricLabel"] {
+        text-align: center !important;
+        font-size: 18px !important;
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 26px !important;
+        font-weight: bold !important;
+        color: #305D26 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 
 
