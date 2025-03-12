@@ -32,7 +32,7 @@ with st.sidebar.expander("Filters", expanded=True):
     select_all_regions = st.checkbox("Select All Regions", value=True)
     region = st.multiselect("Select Preferred Region:", options=df["Region"].unique(), default=df["Region"].unique() if select_all_regions else [])
 
-     select_all_peril= st.checkbox("Select Perils", value=True)
+    select_all_peril= st.checkbox("Select Perils", value=True)
     peril= st.multiselect("Select Preferred Peril:", options=df["Peril"].unique(), default=df["Peril"].unique() if select_all_peril else [])
     
     
