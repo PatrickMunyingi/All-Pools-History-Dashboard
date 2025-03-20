@@ -164,19 +164,18 @@ elif option == "Premium financing and Tracker":
     # Premium Payer Selection
     premium_payers_mapping = {col: col.replace("Premium Financed by ", "") for col in premium_payers}
 
-        # Sidebar: Premium Payer Selection
-    with st.sidebar.expander("Premium Payers", expanded=True):
+    # Create a container for the premium payer filter at the top
+    with st.container():
+        st.markdown("### Select Premium Payers")
         premium_payers_mapping = {col: col.replace("Premium Financed by ", "") for col in premium_payers}
-    
         select_all_payers = st.checkbox("Select All Premium Payers", value=True)
-        
         selected_payers_display = st.multiselect(
             "Select Premium Payers", 
             options=premium_payers_mapping.values(), 
             default=premium_payers_mapping.values() if select_all_payers else []
         )
-    
-    # Ensure selected payers are mapped back to original column names
+   
+
     selected_payers = [orig_col for orig_col, display_name in premium_payers_mapping.items() if display_name in selected_payers_display]
     
     # ✅ FIX: If No Payers Selected, Show ALL Data
@@ -186,8 +185,6 @@ elif option == "Premium financing and Tracker":
     else:
         df_premium_financing = df_selection[df_selection[selected_payers].fillna(0).sum(axis=1) > 0]  # Filter by payers
         total_premium = df_premium_financing[selected_payers].sum().sum()  # ✅ Sum from selected payers
-
-
 
     # ✅ Claims, Coverage, Loss Ratio
     total_claims = df_premium_financing['Claims'].sum()
@@ -237,4 +234,3 @@ elif option == "Premium financing and Tracker":
        
         csv = df_selection.to_csv(index=False).encode('utf-8')
         st.download_button("Download Data as CSV", csv, "filtered_data.csv", "text/csv")
-
