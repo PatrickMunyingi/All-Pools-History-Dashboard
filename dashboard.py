@@ -164,12 +164,7 @@ if option == "Premium and country basic Information":
 
 # ✅ Option 2: Premium financing and Tracker
 elif option == "Premium financing and Tracker":
-    # Debugging: Check detected premium payers
-    st.sidebar.write("🔍 Debugging: Premium Payers Detected:", premium_payers)
-
-    if premium_payers:  # Only proceed if there are valid columns
-        premium_payers_mapping = {col: col.replace("Premium Financed by ", "") for col in premium_payers}
-        
+  
         with st.container():
             st.markdown("### Select Premium Payers")
             
@@ -188,16 +183,9 @@ elif option == "Premium financing and Tracker":
         st.warning("⚠ No Premium Payers found in the dataset!")
         selected_payers = []
 
-    # Debugging: Check available columns in df_selection
-    st.sidebar.write("🔍 Debugging: Columns in df_selection:", df_selection.columns.tolist())
+  
 
-    # ✅ FIX: If No Payers Selected, Show ALL Data
-    if not selected_payers:
-        df_premium_financing = df_selection  # Show all unfiltered data
-        total_premium = df_premium_financing['Premium'].sum()  # Sum from main column if no filter
-    else:
-        df_premium_financing = df_selection[df_selection[selected_payers].fillna(0).sum(axis=1) > 0]  # Filter by payers
-        total_premium = df_premium_financing[selected_payers].sum().sum()  # ✅ Sum from selected payers
+
 
     # ✅ Claims, Coverage, Loss Ratio
     total_claims = df_premium_financing['Claims'].sum()
@@ -235,7 +223,7 @@ elif option == "Premium financing and Tracker":
     unsafe_allow_html=True
 )
 
-    # 🔍 Debugging Sidebar: Check Totals Before & After Filtering
+  
     st.sidebar.write(f"Total Unfiltered Premium: US ${df_selection['Premium'].sum():,.0f}")
     st.sidebar.write(f"Total Premium (from Payers): US ${total_premium:,.0f}")
 
