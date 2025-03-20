@@ -31,7 +31,7 @@ st.markdown("<h1 class='animated-title'>📊 ALL POOLS HISTORY DASHBOARD 🔍�
 # Cache Data Loading
 @st.cache_data
 def load_data():
-    return pd.read_excel("all pools.xlsx")  # Load only needed columns if applicable
+    return pd.read_excel("C:\\Users\\PatrickMunyingi\\all pools.xlsx")  # Load only needed columns if applicable
 
 df = load_data()
 
@@ -234,3 +234,4 @@ elif option == "Premium financing and Tracker":
        
         csv = df_selection.to_csv(index=False).encode('utf-8')
         st.download_button("Download Data as CSV", csv, "filtered_data.csv", "text/csv")
+
