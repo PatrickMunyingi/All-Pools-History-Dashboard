@@ -164,28 +164,30 @@ if option == "Premium and country basic Information":
 
 # ✅ Option 2: Premium financing and Tracker
 elif option == "Premium financing and Tracker":
-  
-        with st.container():
-            st.markdown("### Select Premium Payers")
-            
-            select_all_payers = st.checkbox("Select All Premium Payers", value=True)
+    # Premium Payer Selection
+    premium_payers_mapping = {col: col.replace("Premium Financed by ", "") for col in premium_payers}
 
-            selected_payers_display = st.multiselect(
-                "Select Premium Payers", 
-                options=premium_payers_mapping.values(), 
-                default=premium_payers_mapping.values() if select_all_payers else []
-            )
+    # Create a container for the premium payer filter at the top
+    with st.container():
+        st.markdown("### Select Premium Payers")
+        premium_payers_mapping = {col: col.replace("Premium Financed by ", "") for col in premium_payers}
+        select_all_payers = st.checkbox("Select All Premium Payers", value=True)
+        selected_payers_display = st.multiselect(
+            "Select Premium Payers", 
+            options=premium_payers_mapping.values(), 
+            default=premium_payers_mapping.values() if select_all_payers else []
+        )
+   
 
-            # Convert display names back to column names
-            selected_payers = [orig_col for orig_col, display_name in premium_payers_mapping.items() if display_name in selected_payers_display]
-
+    selected_payers = [orig_col for orig_col, display_name in premium_payers_mapping.items() if display_name in selected_payers_display]
+    
+    # ✅ FIX: If No Payers Selected, Show ALL Data
+    if not selected_payers:
+        df_premium_financing = df_selection  # Show all unfiltered data
+        total_premium = df_premium_financing['Premium'].sum()  # Sum from main column if no filter
     else:
-        st.warning("⚠ No Premium Payers found in the dataset!")
-        selected_payers = []
-
-  
-
-
+        df_premium_financing = df_selection[df_selection[selected_payers].fillna(0).sum(axis=1) > 0]  # Filter by payers
+        total_premium = df_premium_financing[selected_payers].sum().sum()  # ✅ Sum from selected payers
 
     # ✅ Claims, Coverage, Loss Ratio
     total_claims = df_premium_financing['Claims'].sum()
@@ -223,7 +225,7 @@ elif option == "Premium financing and Tracker":
     unsafe_allow_html=True
 )
 
-  
+    # 🔍 Debugging Sidebar: Check Totals Before & After Filtering
     st.sidebar.write(f"Total Unfiltered Premium: US ${df_selection['Premium'].sum():,.0f}")
     st.sidebar.write(f"Total Premium (from Payers): US ${total_premium:,.0f}")
 
@@ -232,6 +234,6 @@ elif option == "Premium financing and Tracker":
     # Display Filtered Data Table with Export Option
     if not df_selection.empty:
         st.write(f"Showing {len(df_selection)} records.")
+       
         csv = df_selection.to_csv(index=False).encode('utf-8')
         st.download_button("Download Data as CSV", csv, "filtered_data.csv", "text/csv")
-
