@@ -30,10 +30,12 @@ st.markdown("<h1 class='animated-title'>📊 ALL POOLS HISTORY DASHBOARD 🔍�
 
 # Cache Data Loading
 @st.cache_data
-def load_data():
-    return pd.read_excel("all pools.xlsx")  # Load only needed columns if applicable
+# Load the correct file
+file_path = "all pools.xlsx"  # Ensure this matches the exact filename
+df = pd.read_excel(file_path)
 
-df = load_data()
+# Debug: Check if file is correctly loaded
+print("✅ File loaded successfully:", df.shape)
 
 # Ensure numerical columns are properly formatted
 numeric_cols = ['Premium', 'Attachment', 'Exhaustion', 'Coverage', 'Claims']
