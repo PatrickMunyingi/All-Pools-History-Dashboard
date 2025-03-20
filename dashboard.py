@@ -161,23 +161,33 @@ if option == "Premium and country basic Information":
 
 # ✅ Option 2: Premium financing and Tracker
 elif option == "Premium financing and Tracker":
-    # Premium Payer Selection
-    premium_payers_mapping = {col: col.replace("Premium Financed by ", "") for col in premium_payers}
+    # Debugging: Check detected premium payers
+    st.sidebar.write("🔍 Debugging: Premium Payers Detected:", premium_payers)
 
-    # Create a container for the premium payer filter at the top
-    with st.container():
-        st.markdown("### Select Premium Payers")
+    if premium_payers:  # Only proceed if there are valid columns
         premium_payers_mapping = {col: col.replace("Premium Financed by ", "") for col in premium_payers}
-        select_all_payers = st.checkbox("Select All Premium Payers", value=True)
-        selected_payers_display = st.multiselect(
-            "Select Premium Payers", 
-            options=premium_payers_mapping.values(), 
-            default=premium_payers_mapping.values() if select_all_payers else []
-        )
-   
+        
+        with st.container():
+            st.markdown("### Select Premium Payers")
+            
+            select_all_payers = st.checkbox("Select All Premium Payers", value=True)
 
-    selected_payers = [orig_col for orig_col, display_name in premium_payers_mapping.items() if display_name in selected_payers_display]
-    
+            selected_payers_display = st.multiselect(
+                "Select Premium Payers", 
+                options=premium_payers_mapping.values(), 
+                default=premium_payers_mapping.values() if select_all_payers else []
+            )
+
+            # Convert display names back to column names
+            selected_payers = [orig_col for orig_col, display_name in premium_payers_mapping.items() if display_name in selected_payers_display]
+
+    else:
+        st.warning("⚠ No Premium Payers found in the dataset!")
+        selected_payers = []
+
+    # Debugging: Check available columns in df_selection
+    st.sidebar.write("🔍 Debugging: Columns in df_selection:", df_selection.columns.tolist())
+
     # ✅ FIX: If No Payers Selected, Show ALL Data
     if not selected_payers:
         df_premium_financing = df_selection  # Show all unfiltered data
@@ -231,6 +241,6 @@ elif option == "Premium financing and Tracker":
     # Display Filtered Data Table with Export Option
     if not df_selection.empty:
         st.write(f"Showing {len(df_selection)} records.")
-       
         csv = df_selection.to_csv(index=False).encode('utf-8')
         st.download_button("Download Data as CSV", csv, "filtered_data.csv", "text/csv")
+
