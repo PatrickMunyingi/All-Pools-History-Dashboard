@@ -32,7 +32,7 @@ st.markdown("<h1 class='animated-title'>📊 ALL POOLS HISTORY DASHBOARD 🔍�
 @st.cache_data
 @st.cache_data
 def load_data():
-    return pd.read_excel(all pools.xlsx)  # Load only needed columns if applicable
+    return pd.read_excel("all pools.xlsx")  # Load only needed columns if applicable
 
 df = load_data()
 # Debug: Check if file is correctly loaded
