@@ -34,7 +34,7 @@ def sort_pools(pool_list):
 # --- Load and Clean Data ---
 @st.cache_data
 def load_data():
-    df = pd.read_excel("C:/Users/PatrickMunyingi/all pools.xlsx")
+    df = pd.read_excel("all pools.xlsx")
     numeric_cols = ['Premium', 'Attachment', 'Exhaustion', 'Coverage', 'Claims']
     df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
     df['Pool'] = df['Pool'].astype(str)
