@@ -1,6 +1,7 @@
-import streamlit as st
 import pandas as pd
 import plotly.express as px
+from datetime import datetime
+import streamlit as st
 
 # --- Page Setup ---
 st.set_page_config(page_title="All Pools History Dashboard", layout="wide", initial_sidebar_state="expanded")
@@ -27,6 +28,12 @@ st.markdown("""
 
 st.markdown("<h1 class='animated-title'>ALL POOLS HISTORY DASHBOARD</h1>", unsafe_allow_html=True)
 
+#Add date info below the animated title
+from datetime import datetime
+today = datetime.today()
+first_of_month = today.replace(day=1).strftime("%B %d, %Y")
+st.markdown(f"** Data as of {first_of_month}**")
+
 # --- Helper for sorting pools naturally ---
 def sort_pools(pool_list):
     return sorted(pool_list, key=lambda x: (int(''.join(filter(str.isdigit, x)) or 0), x))
@@ -35,6 +42,8 @@ def sort_pools(pool_list):
 @st.cache_data
 def load_data():
     df = pd.read_excel("all pools.xlsx")
+    if "Policy ID" in df.columns:
+        df.set_index("Policy ID", inplace=True)
     numeric_cols = ['Premium', 'Attachment', 'Exhaustion', 'Coverage', 'Claims']
     df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce').fillna(0)
     df['Pool'] = df['Pool'].astype(str)
@@ -74,6 +83,7 @@ df_selection = df[
     df['Peril'].isin(peril) &
     df['Region'].isin(region)
 ]
+num_policies = len(df_selection)
 
 # --- View Selection ---
 option = st.selectbox("What would you like to view?", 
@@ -86,20 +96,23 @@ if option == "Premium and country basic Information":
     total_coverage = df_selection['Coverage'].sum()
     loss_ratio = (total_claims / total_premium) * 100 if total_premium > 0 else 0
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Total Premium", f"US ${total_premium:,.0f}")
     col2.metric("Loss Ratio", f"{loss_ratio:.2f}%")
     col3.metric("Coverage", f"US ${total_coverage:,.0f}")
     col4.metric("Claims", f"US ${total_claims:,.0f}")
+    col5.metric("Number of Policies", f"{num_policies}")
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
         if not df_selection.empty:
-            yearly_premium = df_selection.groupby('Policy Years')['Premium'].sum().reset_index()
-            fig1 = px.line(yearly_premium, x='Policy Years', y='Premium', markers=True,
-                           title='Yearly Premiums Over Time', template='plotly_white')
-            st.plotly_chart(fig1)
+            trend_metric = st.radio("Select Metric", ["Premium", "Coverage"], horizontal=True)
+
+            yearly_trend = df_selection.groupby('Policy Years')[trend_metric].sum().reset_index()
+            fig1 = px.line(yearly_trend, x='Policy Years', y=trend_metric, markers=True,
+                        title=f'Yearly {trend_metric}s Over Time', template='plotly_white')
+            st.plotly_chart(fig1, use_container_width=True)
 
     with col2:
         country_count = df_selection['Country'].value_counts().reset_index()
@@ -133,15 +146,16 @@ elif option == "Premium financing and Tracker":
         df_premium_financing = df_selection[df_selection[selected_payers].fillna(0).sum(axis=1) > 0]
         total_premium = df_premium_financing[selected_payers].sum().sum()
 
-    total_claims = df_premium_financing['Claims'].sum()
-    total_coverage = df_premium_financing['Coverage'].sum()
+    total_claims = df_selection['Claims'].sum()
+    total_coverage = df_selection['Coverage'].sum()
     loss_ratio = (total_claims / total_premium) * 100 if total_premium > 0 else 0
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Premium", f"US ${total_premium:,.0f}")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("Total Premium (from Payers)", f"US ${total_premium:,.0f}")
     col2.metric("Loss Ratio", f"{loss_ratio:.2f}%")
     col3.metric("Coverage", f"US ${total_coverage:,.0f}")
     col4.metric("Claims", f"US ${total_claims:,.0f}")
+    col5.metric("Number of Policies", f"{num_policies}")
 
     chart_view = st.radio("Chart Type", ["Donor-Style Summary", "Stacked by Pool"], horizontal=True)
 
@@ -170,44 +184,129 @@ elif option == "Premium financing and Tracker":
             fig = px.bar(grouped, x=pool_column, y='Amount', color='Payer',
                          title='Premium Payers per Pool (Stacked)', barmode='stack',
                          text_auto='.2s', template='plotly_white')
-            fig.update_layout(xaxis={'categoryorder':'array', 'categoryarray': all_pools})
+            fig.update_layout(xaxis={'categoryorder': 'array', 'categoryarray': all_pools})
             st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("#### Filtered Financing Data")
         st.dataframe(df_premium_financing)
-        csv = df_premium_financing.to_csv(index=False).encode('utf-8')
+        csv = df_premium_financing.to_csv(index=True).encode('utf-8')
         st.download_button("Download Financing CSV", csv, "premium_financing.csv", "text/csv")
 
 # --- Section 3: Claim Settlement ---
 elif option == "Claim settlement history":
     st.subheader("Claim Settlement Overview")
     total_claims = df_selection['Claims'].sum()
-    num_records = len(df_selection)
-    avg_claim = total_claims / num_records if num_records > 0 else 0
+    num_claims = df_selection[df_selection["Claims"] > 0].shape[0]
+    avg_claim = total_claims / num_claims if num_claims > 0 else 0
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Claims", f"US ${total_claims:,.0f}")
-
-    col3.metric("Avg Claim", f"US ${avg_claim:,.0f}")
+    col2.metric("Number of Policies", f"{num_policies}")
+    col3.metric("Number of Claims", f"{num_claims}")
+    col4.metric("Avg Claim (per Claim)", f"US ${avg_claim:,.0f}")
 
     sorted_all_pools = sort_pools(df[pool_column].unique())
     claims_by_pool = df_selection.groupby(pool_column, as_index=False)["Claims"].sum()
     claims_by_pool = pd.DataFrame({pool_column: sorted_all_pools}).merge(claims_by_pool, on=pool_column, how="left").fillna(0)
     claims_by_pool["Avg Trend"] = claims_by_pool["Claims"].expanding().mean()
 
-
-
-    col1, col2 = st.columns(2)
+    col1, col2,col3 = st.columns(3)
+    # 1. Top 10 Pools by Claims
     with col1:
-        claims_by_peril = df_selection.groupby("Peril")["Claims"].sum().reset_index()
-        fig2 = px.pie(claims_by_peril, names="Peril", values="Claims", title="Claims by Peril", hole=0.5)
+        top_pools = df_selection.groupby(pool_column)["Claims"].sum().sort_values(ascending=False).head(10).reset_index()
+        fig1 = px.bar(
+            top_pools,
+            x="Claims",
+            y=pool_column,
+            orientation="h",
+            title="💰 Top 10 Pools by Claims Paid",
+            text="Claims",
+            template="plotly_white"
+        )
+        fig1.update_traces(texttemplate='$%{x:,.0f}', textposition='outside')
+        st.plotly_chart(fig1, use_container_width=True)
+
+    # 2. Claims vs Premium Over Time
+    with col2:
+        claims_trend = df_selection.groupby("Policy Years")[["Claims", "Premium"]].sum().reset_index()
+        fig2 = px.area(claims_trend, x="Policy Years", y=["Premium", "Claims"],
+                    title=" Claims vs Premium Over Time", template="plotly_white")
         st.plotly_chart(fig2, use_container_width=True)
 
-    with col2:
-        if "Policy Years" in df_selection.columns:
-            claims_by_year = df_selection.groupby("Policy Years")["Claims"].sum().reset_index()
-            fig3 = px.line(claims_by_year, x="Policy Years", y="Claims", title="Claims Over Policy Years", markers=True, template="plotly_white")
-            st.plotly_chart(fig3, use_container_width=True)
+    # 3. Highest Loss Ratios by Pool
+    with col3:
+        pool_summary = df_selection.groupby(pool_column).agg({'Claims': 'sum', 'Premium': 'sum'}).reset_index()
+        pool_summary["Loss Ratio"] = pool_summary["Claims"] / pool_summary["Premium"] * 100
+        top_loss = pool_summary[pool_summary["Premium"] > 0].sort_values("Loss Ratio", ascending=False).head(10)
+
+        fig3 = px.bar(
+            top_loss,
+            x=pool_column,
+            y="Loss Ratio",
+            title="🔥 Pools with Highest Loss Ratios",
+            text="Loss Ratio",
+            template="plotly_white"
+        )
+        fig3.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
+        fig3.update_layout(yaxis_title="Loss Ratio (%)")
+        st.plotly_chart(fig3, use_container_width=True)
+
+    # 4. Claims by Country - Choropleth Map (full width)
+    #  Claims/Premium/Loss Ratio Choropleth Map with Toggle
+
+        # --- Country-Level Choropleth Map (inside Claim Settlement block only) ---
+    st.markdown("###  Country-Level Summary Map")
+
+    # Metric selection
+    map_metric = st.radio("Select metric to display on map:", ["Claims", "Premium", "Loss Ratio"], horizontal=True)
+
+    # Group & compute base stats
+    country_stats = df_selection.groupby("Country")[["Claims", "Premium"]].sum().reset_index()
+    country_stats = country_stats[country_stats["Premium"] > 0]  # avoid divide by zero
+    country_stats["Loss Ratio"] = (country_stats["Claims"] / country_stats["Premium"]) * 100
+
+    # Choose color scale
+    color_scale = {
+        "Claims": "Reds",
+        "Premium": "Blues",
+        "Loss Ratio": "Oranges"
+    }
+
+    # Format title
+    metric_title = {
+        "Claims": "Total Claims by Country",
+        "Premium": "Total Premium by Country",
+        "Loss Ratio": "Loss Ratio (%) by Country"
+    }
+
+    # Plot map
+    if not country_stats.empty:
+        fig_map = px.choropleth(
+            country_stats,
+            locations="Country",
+            locationmode="country names",
+            color=map_metric,
+            hover_name="Country",
+            color_continuous_scale=color_scale[map_metric],
+            title=f"🌍 {metric_title[map_metric]}",
+            template="plotly_white"
+        )
+        fig_map.update_geos(
+            showcountries=True,
+            showcoastlines=True,
+            showland=True,
+            fitbounds="locations"
+        )
+        fig_map.update_layout(margin={"r":0,"t":50,"l":0,"b":0})
+        st.plotly_chart(fig_map, use_container_width=True)
+    else:
+        st.info("No country-level data available for selected metric.")
+
+    # Optional table below
+    with st.expander(" View Country-Level Table"):
+        st.dataframe(country_stats.sort_values(map_metric, ascending=False))
+
+
 
     st.markdown("#### Filtered Claim Data")
     st.dataframe(df_selection)
