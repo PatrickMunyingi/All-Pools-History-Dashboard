@@ -110,7 +110,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.subheader("##### Yearly Premiums over Time")
+            st.markdown("##### Yearly Premiums over Time")
             if not df_selection.empty:
                 trend_metric = st.radio("Select Metric", ["Premium", "Coverage"], horizontal=True)
 
