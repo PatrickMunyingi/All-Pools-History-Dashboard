@@ -111,10 +111,10 @@ if Business_Types=="SOVEREIGN BUSINESS":
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.markdown("###### Yearly Premiums over Time")
+            
             if not df_selection.empty:
                 trend_metric = st.radio("Select Metric", ["Premium", "Coverage"], horizontal=True)
-
+                st.markdown(f"###### Yearly {trend_metric} over Time")
                 yearly_trend = df_selection.groupby('Policy Years')[trend_metric].sum().reset_index()
                 fig1 = px.line(yearly_trend, x='Policy Years', y=trend_metric, markers=True, template='plotly_white')
                 st.plotly_chart(fig1, use_container_width=True)
