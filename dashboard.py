@@ -100,6 +100,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
 
         
         st.subheader("Premium and Country Infomation Overview")
+        st.markdown("###### Summary Statistics")
         col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric("Total Premium", f"US ${total_premium:,.0f}")
         col2.metric("Loss Ratio", f"{loss_ratio:.2f}%")
@@ -110,7 +111,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.markdown("##### Yearly Premiums over Time")
+            st.markdown("###### Yearly Premiums over Time")
             if not df_selection.empty:
                 trend_metric = st.radio("Select Metric", ["Premium", "Coverage"], horizontal=True)
 
@@ -138,7 +139,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
     # --- Section 2: Premium Financing and Tracker ---
     elif option == "Premium financing and Tracker":
         premium_payers_mapping = {col: col.replace("Premium Financed by ", "") for col in premium_payers}
-        st.markdown("##### Select Premium Payers")
+        st.markdown("####### Select Premium Payers")
         select_all_payers = st.checkbox("Select All Premium Payers", value=True)
         selected_payers_display = st.multiselect("Premium Payers", premium_payers_mapping.values(), default=premium_payers_mapping.values() if select_all_payers else [])
         selected_payers = [k for k, v in premium_payers_mapping.items() if v in selected_payers_display]
@@ -154,6 +155,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
         total_coverage = df_selection['Coverage'].sum()
         loss_ratio = (total_claims / total_premium) * 100 if total_premium > 0 else 0
         st.subheader("Premium Financing Overview")
+        st.markdown("###### Summary Statistics")
         col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric("Total Premium (from Payers)", f"US ${total_premium:,.0f}")
         col2.metric("Loss Ratio", f"{loss_ratio:.2f}%")
@@ -199,6 +201,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
     # --- Section 3: Claim Settlement ---
     elif option == "Claim settlement history":
         st.subheader("Claim Settlement Overview")
+        st.markdown("###### Summary Statistics")
         total_claims = df_selection['Claims'].sum()
         num_claims = df_selection[df_selection["Claims"] > 0].shape[0]
         avg_claim = total_claims / num_claims if num_claims > 0 else 0
