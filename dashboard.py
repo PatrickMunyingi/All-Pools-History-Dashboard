@@ -196,7 +196,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
 
     # --- Section 3: Claim Settlement ---
     elif option == "Claim settlement history":
-        st.subheader("Claim Settlement Overview")
+        st.markdown("Claim Settlement Overview")
         total_claims = df_selection['Claims'].sum()
         num_claims = df_selection[df_selection["Claims"] > 0].shape[0]
         avg_claim = total_claims / num_claims if num_claims > 0 else 0
