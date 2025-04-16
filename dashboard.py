@@ -98,6 +98,8 @@ if Business_Types=="SOVEREIGN BUSINESS":
         total_coverage = df_selection['Coverage'].sum()
         loss_ratio = (total_claims / total_premium) * 100 if total_premium > 0 else 0
 
+        st.subheader("Premium and Country Infomation Overview")
+
         col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric("Total Premium", f"US ${total_premium:,.0f}")
         col2.metric("Loss Ratio", f"{loss_ratio:.2f}%")
