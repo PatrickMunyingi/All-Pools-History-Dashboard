@@ -376,7 +376,8 @@ if Business_Types=="IIS":
     claims_ratio = total_payout / (total_arc + total_fac) if (total_arc + total_fac) > 0 else 0
     num_programmes = filtered_df["Programme Name"].nunique()
 
-    st.markdown("## 📊 Inclusive Insurance Business (IIS) Dashboard")
+    st.subheader(" 📊 Inclusive Insurance Business (IIS) Dashboard")
+    st.markdown("##### Summary Statistics")
 
     kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
     kpi1.metric("💰 ARC Premium", f"${total_arc:,.0f}")
