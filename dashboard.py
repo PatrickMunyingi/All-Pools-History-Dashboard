@@ -164,11 +164,28 @@ if Business_Types=="SOVEREIGN BUSINESS":
         col5.metric("Number of Policies", f"{num_policies}")
 
         chart_view = st.radio("Chart Type", ["Donor-Style Summary", "Stacked by Pool"], horizontal=True)
-        distinct_colors = [
-    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD',
-    '#D4A5A5', '#9B59B6', '#3498DB', '#E74C3C', '#2ECC71',
-    '#F1C40F', '#7F8C8D', '#1ABC9C', '#E67E22', '#8E44AD',
-    '#C0392B', '#2980B9', '#27AE60', '#F39C12', '#D35400']
+        distinct_colors =[
+    "#e6194B",  # strong red
+    "#3cb44b",  # strong green
+    "#ffe119",  # bright yellow
+    "#4363d8",  # strong blue
+    "#f58231",  # orange
+    "#911eb4",  # purple
+    "#46f0f0",  # cyan
+    "#f032e6",  # magenta
+    "#bcf60c",  # lime
+    "#fabebe",  # pink
+    "#008080",  # teal
+    "#e6beff",  # lavender
+    "#9a6324",  # brown
+    "#fffac8",  # light yellow
+    "#800000",  # maroon
+    "#aaffc3",  # mint
+    "#808000",  # olive
+    "#ffd8b1",  # apricot
+    "#000075",  # navy
+    "#808080"   # gray
+]
 
         
         if selected_payers:
