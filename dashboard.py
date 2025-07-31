@@ -139,7 +139,8 @@ if Business_Types=="SOVEREIGN BUSINESS":
     # --- Section 2: Premium Financing and Tracker ---
     elif option == "Premium financing and Tracker":
         premium_payers_mapping = {col: col.replace("Premium Financed by ", "") for col in premium_payers}
-        st.markdown("###### Select Premium Payers")
+        Financing_markdown='Note that from Pool 1 to 5, there was no Premium Financing. It began from Pool 6(2019/2020)'
+        st.markdown("### Select Premium Payers",help=Financing_markdown)
         select_all_payers = st.checkbox("Select All Premium Payers", value=True)
         selected_payers_display = st.multiselect("Premium Payers", premium_payers_mapping.values(), default=premium_payers_mapping.values() if select_all_payers else [])
         selected_payers = [k for k, v in premium_payers_mapping.items() if v in selected_payers_display]
