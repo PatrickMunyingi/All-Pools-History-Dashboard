@@ -164,7 +164,13 @@ if Business_Types=="SOVEREIGN BUSINESS":
         col5.metric("Number of Policies", f"{num_policies}")
 
         chart_view = st.radio("Chart Type", ["Donor-Style Summary", "Stacked by Pool"], horizontal=True)
+        distinct_colors = [
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD',
+    '#D4A5A5', '#9B59B6', '#3498DB', '#E74C3C', '#2ECC71',
+    '#F1C40F', '#7F8C8D', '#1ABC9C', '#E67E22', '#8E44AD',
+    '#C0392B', '#2980B9', '#27AE60', '#F39C12', '#D35400']
 
+        
         if selected_payers:
             if chart_view == "Donor-Style Summary":
                 df_summary = df_premium_financing[selected_payers].sum().reset_index()
@@ -173,7 +179,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
                 df_summary['%'] = (df_summary['Amount'] / df_summary['Amount'].sum()) * 100
                 df_summary['Label'] = df_summary['%'].apply(lambda x: f"{x:.2f}%") + "<br>" + df_summary['Amount'].apply(lambda x: f"${x/1e6:.2f}m")
                 fig = px.bar(df_summary, x='Payer', y='Amount', text='Label', color='Payer',
-                            title='Premium Contribution by Financiers', template='plotly_white')
+                            title='Premium Contribution by Financiers', template='plotly_white',color_discrete_sequence=distinct_colors)
                 st.plotly_chart(fig, use_container_width=True)
 
             else:
@@ -189,7 +195,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
 
                 fig = px.bar(grouped, x=pool_column, y='Amount', color='Payer',
                             title='Premium Payers per Pool (Stacked)', barmode='stack',
-                            text_auto='.2s', template='plotly_white')
+                            text_auto='.2s', template='plotly_white',color_discrete_sequence=distinct_colors)
                 fig.update_layout(xaxis={'categoryorder': 'array', 'categoryarray': all_pools})
                 st.plotly_chart(fig, use_container_width=True)
 
