@@ -98,9 +98,6 @@ if Business_Types=="SOVEREIGN BUSINESS":
         total_coverage = df_selection['Coverage'].sum()
         loss_ratio = (total_claims / total_premium) * 100 if total_premium > 0 else 0
 
-        
-        st.subheader("Premium and Country Infomation Overview")
-        st.markdown("###### Summary Statistics")
         col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric("Total Premium", f"US ${total_premium:,.0f}")
         col2.metric("Loss Ratio", f"{loss_ratio:.2f}%")
@@ -111,12 +108,12 @@ if Business_Types=="SOVEREIGN BUSINESS":
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            header_placeholder = st.empty()
             if not df_selection.empty:
                 trend_metric = st.radio("Select Metric", ["Premium", "Coverage"], horizontal=True)
-                header_placeholder.markdown(f"###### **Yearly {trend_metric}s Over Time**")
-                yearly_trend = df_selection.groupby('Policy Years')[trend_metric].sum().reset_index()
-                fig1 = px.line(yearly_trend, x='Policy Years', y=trend_metric, markers=True, template='plotly_white')
+
+                yearly_trend= df_selection.groupby('Policy Years')[trend_metric].sum().reset_index()
+                fig1 = px.line(yearly_trend, x='Policy Years', y=trend_metric, markers=True,
+                            title=f'Yearly {trend_metric}s Over Time', template='plotly_white')
                 st.plotly_chart(fig1, use_container_width=True)
 
         with col2:
@@ -132,9 +129,25 @@ if Business_Types=="SOVEREIGN BUSINESS":
             st.plotly_chart(fig3)
 
         st.markdown("### Filtered Data")
-        st.dataframe(df_selection)
-        csv = df_selection.to_csv(index=False).encode('utf-8')
-        st.download_button("Download CSV", csv, "filtered_data.csv", "text/csv")
+       # Clone to avoid changing original
+        export_df = df.copy()
+
+        # Format as strings (e.g., '85.00%')
+        export_df['Rate-On-Line'] = export_df['Rate-On-Line'].apply(lambda x: f"{x:.2%}")
+        export_df['Ceding %'] = export_df['Ceding %'].apply(lambda x: f"{x:.2%}")
+
+       # Format all other numeric columns to 0 decimal places
+        for col in export_df.columns:
+            if col not in ['Rate-On-Line', 'Ceding %','Premium Loading']:
+                if pd.api.types.is_numeric_dtype(export_df[col]):
+                    export_df[col] = export_df[col].apply(lambda x: f"{x:,.0f}")
+
+        # Display
+        st.dataframe(export_df)
+
+        # Export the string-formatted DataFrame
+        csv = export_df.to_csv(index=False).encode('utf-8')
+       
 
     # --- Section 2: Premium Financing and Tracker ---
     elif option == "Premium financing and Tracker":
@@ -155,8 +168,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
         total_claims = df_selection['Claims'].sum()
         total_coverage = df_selection['Coverage'].sum()
         loss_ratio = (total_claims / total_premium) * 100 if total_premium > 0 else 0
-        st.subheader("Premium Financing Overview")
-        st.markdown("###### Summary Statistics")
+
         col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric("Total Premium (from Payers)", f"US ${total_premium:,.0f}")
         col2.metric("Loss Ratio", f"{loss_ratio:.2f}%")
@@ -187,8 +199,6 @@ if Business_Types=="SOVEREIGN BUSINESS":
     "#000075",  # navy
     "#808080"   # gray
 ]
-
-        
         if selected_payers:
             if chart_view == "Donor-Style Summary":
                 df_summary = df_premium_financing[selected_payers].sum().reset_index()
@@ -206,26 +216,45 @@ if Business_Types=="SOVEREIGN BUSINESS":
 
                 all_pools = sort_pools(df[pool_column].unique())
                 all_payers = df_melted['Payer'].unique()
-                full_index = pd.MultiIndex.from_product([all_pools, all_payers], names=[pool_column, "Payer"]).to_frame(index=False)
+                full_index = pd.MultiIndex.from_product([all_pools, all_payers], names=[pool_column, "Payer"]).to_frame(index=False) # type: ignore
 
                 grouped_actual = df_melted.groupby([pool_column, 'Payer'], as_index=False)['Amount'].sum()
                 grouped = full_index.merge(grouped_actual, on=[pool_column, 'Payer'], how='left').fillna(0)
 
                 fig = px.bar(grouped, x=pool_column, y='Amount', color='Payer',
                             title='Premium Payers per Pool (Stacked)', barmode='stack',
-                            text_auto='.2s', template='plotly_white',color_discrete_sequence=distinct_colors)
+                            text_auto='.2s', template='plotly_white',color_discrete_sequence=distinct_colors) # type: ignore
                 fig.update_layout(xaxis={'categoryorder': 'array', 'categoryarray': all_pools})
                 st.plotly_chart(fig, use_container_width=True)
 
             st.markdown("#### Filtered Financing Data")
-            st.dataframe(df_premium_financing)
-            csv = df_premium_financing.to_csv(index=True).encode('utf-8')
-            st.download_button("Download Financing CSV", csv, "premium_financing.csv", "text/csv")
+            
+            export_df = df_premium_financing.copy()
+
+            # Format as strings (e.g., '85.00%')
+            export_df['Rate-On-Line'] = export_df['Rate-On-Line'].apply(lambda x: f"{x:.2%}")
+            export_df['Ceding %'] = export_df['Ceding %'].apply(lambda x: f"{x:.2%}")
+
+       #     Format all other numeric columns to 0 decimal places
+            for col in export_df.columns:
+                if col not in ['Rate-On-Line', 'Ceding %','Premium Loading']:
+                    if pd.api.types.is_numeric_dtype(export_df[col]):
+                        export_df[col] = export_df[col].apply(lambda x: f"{x:,.0f}")
+
+             # Display
+            st.dataframe(export_df)
+
+            # Export the string-formatted DataFrame
+            csv = export_df.to_csv(index=False).encode('utf-8')
+
+
+
+
+
 
     # --- Section 3: Claim Settlement ---
     elif option == "Claim settlement history":
         st.subheader("Claim Settlement Overview")
-        st.markdown("###### Summary Statistics")
         total_claims = df_selection['Claims'].sum()
         num_claims = df_selection[df_selection["Claims"] > 0].shape[0]
         avg_claim = total_claims / num_claims if num_claims > 0 else 0
@@ -244,7 +273,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
         col1, col2,col3 = st.columns(3)
         # 1. Top 10 Pools by Claims
         with col1:
-            top_pools = df_selection.groupby(pool_column)["Claims"].sum().sort_values(ascending=False).head(10).reset_index()
+            top_pools = df_selection.groupby(pool_column)["Claims"].sum().sort_values(ascending=False).reset_index()
             fig1 = px.bar(
                 top_pools,
                 x="Claims",
@@ -252,7 +281,8 @@ if Business_Types=="SOVEREIGN BUSINESS":
                 orientation="h",
                 title="💰 Top 10 Pools by Claims Paid",
                 text="Claims",
-                template="plotly_white"
+                template="plotly_white",
+                color="Claims"
             )
             fig1.update_traces(texttemplate='$%{x:,.0f}', textposition='outside')
             st.plotly_chart(fig1, use_container_width=True)
@@ -276,7 +306,8 @@ if Business_Types=="SOVEREIGN BUSINESS":
                 y="Loss Ratio",
                 title="🔥 Pools with Highest Loss Ratios",
                 text="Loss Ratio",
-                template="plotly_white"
+                template="plotly_white",
+                color='Loss Ratio'
             )
             fig3.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
             fig3.update_layout(yaxis_title="Loss Ratio (%)")
@@ -340,15 +371,29 @@ if Business_Types=="SOVEREIGN BUSINESS":
 
 
         st.markdown("#### Filtered Claim Data")
-        st.dataframe(df_selection)
-        csv = df_selection.to_csv(index=False).encode("utf-8")
-        st.download_button("Download Claims",csv, "claim_settlement.pdf", "pdf/csv")
+       
+        df_selection['Claims']=df_selection['Claims'].apply(lambda x: f'{x:,.0f}')
+    
+        export_df=df_selection.copy()
+        # Format as strings (e.g., '85.00%')
+        export_df['Rate-On-Line'] = export_df['Rate-On-Line'].apply(lambda x: f"{x:.2%}")
+        export_df['Ceding %'] = export_df['Ceding %'].apply(lambda x: f"{x:.2%}")
+       #    Format all other numeric columns to 0 decimal places
+        for col in export_df.columns:
+            if col not in ['Rate-On-Line', 'Ceding %','Premium Loading']:
+                if pd.api.types.is_numeric_dtype(export_df[col]):
+                    export_df[col] = export_df[col].apply(lambda x: f"{x:,.0f}")
+         # Display
+        st.dataframe(export_df)
+        # Export the string-formatted DataFrame
+        csv = export_df.to_csv(index=False).encode('utf-8')
+       
 
 
 if Business_Types=="IIS":
     @st.cache_data
     def load_data():
-        df = pd.read_excel("all pools.xlsx", sheet_name="IIS")
+        df = pd.read_excel("C:/Users/PatrickMunyingi/all pools.xlsx", sheet_name="IIS")
         return df
 
     df = load_data()
@@ -400,8 +445,7 @@ if Business_Types=="IIS":
     claims_ratio = total_payout / (total_arc + total_fac) if (total_arc + total_fac) > 0 else 0
     num_programmes = filtered_df["Programme Name"].nunique()
 
-    st.subheader(" 📊 Inclusive Insurance Business (IIS) Dashboard")
-    st.markdown("##### Summary Statistics")
+    st.markdown("## 📊 Inclusive Insurance Business (IIS) Dashboard")
 
     kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
     kpi1.metric("💰 ARC Premium", f"${total_arc:,.0f}")
@@ -429,6 +473,16 @@ if Business_Types=="IIS":
     # --- Summary Table and Download ---
     st.markdown("### 📋 Country Summary Table")
     st.dataframe(country_agg)
-
+    # Function to format numbers based on type
+ 
+ 
+    def format_numbers(x):
+        if isinstance(x, int):  # Check if the value is an integer
+            return f'{x:,}'  # Add commas and remove decimals
+        elif isinstance(x, float):  # Check if the value is a float
+            return f'{x:,.2f}%'  # Add commas and format as percentage to 2 decimal places
+        return x  # Return the value unchanged if it's not a number
+    country_agg=country_agg.applymap(format_numbers) # type: ignore
+    
     csv = country_agg.to_csv(index=False).encode('utf-8')
     st.download_button("⬇️ Download Summary CSV", data=csv, file_name="iis_country_summary.csv", mime="text/csv")
