@@ -393,7 +393,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
 if Business_Types=="IIS":
     @st.cache_data
     def load_data():
-        df = pd.read_excel("C:/Users/PatrickMunyingi/all pools.xlsx", sheet_name="IIS")
+        df = pd.read_excel("all pools.xlsx", sheet_name="IIS")
         return df
 
     df = load_data()
@@ -486,3 +486,4 @@ if Business_Types=="IIS":
     
     csv = country_agg.to_csv(index=False).encode('utf-8')
     st.download_button("⬇️ Download Summary CSV", data=csv, file_name="iis_country_summary.csv", mime="text/csv")
+
