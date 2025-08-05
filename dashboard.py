@@ -130,7 +130,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
 
         st.markdown("### Filtered Data")
        # Clone to avoid changing original
-        export_df = df.copy()
+        export_df = df_selection.copy()
 
         # Format as strings (e.g., '85.00%')
         export_df['Rate-On-Line'] = export_df['Rate-On-Line'].apply(lambda x: f"{x:.2%}")
@@ -486,4 +486,5 @@ if Business_Types=="IIS":
     
     csv = country_agg.to_csv(index=False).encode('utf-8')
     st.download_button("⬇️ Download Summary CSV", data=csv, file_name="iis_country_summary.csv", mime="text/csv")
+
 
