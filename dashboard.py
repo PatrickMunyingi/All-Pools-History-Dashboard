@@ -77,13 +77,17 @@ if Business_Types=="SOVEREIGN BUSINESS":
         select_all_peril = st.checkbox("Select All Perils", value=True)
         peril = st.multiselect("Peril:", options=df["Peril"].unique(), default=df["Peril"].unique() if select_all_peril else [])
 
+        select_all_crop_types = st.checkbox("Select All Crop Types", value=True)
+        crop_type = st.multiselect("Crop Type:", options=df["Crop Type"].unique(), default=df["Crop Type"].unique() if select_all_peril else [])
+
     # --- Filter Dataset ---
     df_selection = df[
         df[pool_column].isin(pool) &
         df['Policy Type'].isin(policy_type) &
         df['Country'].isin(country) &
         df['Peril'].isin(peril) &
-        df['Region'].isin(region)
+        df['Region'].isin(region)&
+        df['Crop Type'].isin(crop_type)
     ]
     num_policies = len(df_selection)
 
@@ -108,14 +112,36 @@ if Business_Types=="SOVEREIGN BUSINESS":
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            if not df_selection.empty:
-                trend_metric = st.radio("Select Metric", ["Premium", "Coverage"], horizontal=True)
-
-                yearly_trend= df_selection.groupby('Policy Years')[trend_metric].sum().reset_index()
-                fig1 = px.line(yearly_trend, x='Policy Years', y=trend_metric, markers=True,
-                            title=f'Yearly {trend_metric}s Over Time', template='plotly_white')
-                st.plotly_chart(fig1, use_container_width=True)
-
+           if not df_selection.empty:
+            trend_metric = st.radio("Select Metric", ["Premium", "Coverage"], horizontal=True)
+    
+            # Step 1 — Create trend DataFrame
+            Pool_trend = df_selection.groupby(pool_column)[trend_metric].sum().reset_index()
+    
+            # Step 2 — Ensure Pool column is string
+            Pool_trend[pool_column] = Pool_trend[pool_column].astype(str)
+    
+            # Step 3 — Extract number and detect suffix
+            Pool_trend["__num"] = Pool_trend[pool_column].str.extract(r"(\d+)").astype(int)
+            Pool_trend["__has_suffix"] = Pool_trend[pool_column].str.contains(r"[A-Za-z]")
+    
+            # Step 4 — Sort so suffixes come last
+            ordered_labels = (
+                Pool_trend.sort_values(["__has_suffix", "__num"])
+                          [pool_column].tolist()
+            )
+            Pool_trend[pool_column] = pd.Categorical(
+                Pool_trend[pool_column], categories=ordered_labels, ordered=True
+            )
+    
+            # Step 5 — Plot
+            fig1 = px.line(
+                Pool_trend.sort_values([pool_column]),
+                x=pool_column, y=trend_metric, markers=True,
+                title=f'Yearly {trend_metric}s Over Time', template='plotly_white',
+                category_orders={pool_column: ordered_labels}
+            )
+            st.plotly_chart(fig1, use_container_width=True)
         with col2:
             country_count = df_selection['Country'].value_counts().reset_index()
             country_count.columns = ['Country', 'Count']
@@ -145,7 +171,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
         # Display
         st.dataframe(export_df)
 
-        # Export the string-formatted DataFrame
+        # Export the string-formatted DataFrame 
         csv = export_df.to_csv(index=False).encode('utf-8')
        
 
@@ -393,7 +419,7 @@ if Business_Types=="SOVEREIGN BUSINESS":
 if Business_Types=="IIS":
     @st.cache_data
     def load_data():
-        df = pd.read_excel("all pools.xlsx", sheet_name="IIS")
+        df = pd.read_excel("C:/Users/PatrickMunyingi/all pools.xlsx", sheet_name="IIS")
         return df
 
     df = load_data()
@@ -486,5 +512,3 @@ if Business_Types=="IIS":
     
     csv = country_agg.to_csv(index=False).encode('utf-8')
     st.download_button("⬇️ Download Summary CSV", data=csv, file_name="iis_country_summary.csv", mime="text/csv")
-
-
