@@ -1,3 +1,72 @@
+# ==== Bootstrap: load SQL config from secrets.toml (local) or env vars (Azure) ====
+import os
+import streamlit as st
+
+def _load_sql_settings():
+    """
+    1) Try `.streamlit/secrets.toml` -> [azure_sql] section
+    2) Fallback to environment variables (Azure App Service)
+    Never raises StreamlitSecretNotFoundError.
+    """
+    # Attempt secrets.toml
+    try:
+        sec = st.secrets["azure_sql"]  # raises if secrets file/section not present
+        return {
+            "server":   sec.get("server", ""),
+            "database": sec.get("database", ""),
+            "user":     sec.get("user", ""),
+            "password": sec.get("password", ""),
+            # optional: port = sec.get("port", "1433")
+        }
+    except Exception:
+        # Fallback to environment
+        return {
+            "server":   os.getenv("AZURE_SQL_SERVER", ""),
+            "database": os.getenv("AZURE_SQL_DATABASE", ""),
+            "user":     os.getenv("AZURE_SQL_USER", ""),
+            "password": os.getenv("AZURE_SQL_PASSWORD", ""),
+        }
+
+_cfg = _load_sql_settings()
+
+# Normalize: make sure later code that uses os.environ still works
+os.environ.setdefault("AZURE_SQL_SERVER",   _cfg.get("server", ""))
+os.environ.setdefault("AZURE_SQL_DATABASE", _cfg.get("database", ""))
+os.environ.setdefault("AZURE_SQL_USER",     _cfg.get("user", ""))
+os.environ.setdefault("AZURE_SQL_PASSWORD", _cfg.get("password", ""))
+
+# (Optional) gentle heads-up if anything is missing
+_missing = [k for k, v in {
+    "AZURE_SQL_SERVER":   os.environ.get("AZURE_SQL_SERVER"),
+    "AZURE_SQL_DATABASE": os.environ.get("AZURE_SQL_DATABASE"),
+    "AZURE_SQL_USER":     os.environ.get("AZURE_SQL_USER"),
+    "AZURE_SQL_PASSWORD": os.environ.get("AZURE_SQL_PASSWORD"),
+}.items() if not v]
+
+if _missing:
+    st.info("ℹ️ SQL settings not fully provided yet: " + ", ".join(_missing))
+# ==== end bootstrap ====
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # dashboard.py
 import os
 import urllib.parse
