@@ -2,6 +2,6 @@ streamlit
 plotly
 pandas
 numpy
-sqlalchemy
-sqlalchemy-tds
-pytds
+scipy
+matplotlib
+openpyxl
