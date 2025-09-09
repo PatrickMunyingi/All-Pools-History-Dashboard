@@ -1,66 +1,30 @@
 # =========================
-# dashboard.py
+# dashboard.py  (Azure env vars only)
 # =========================
-
-# ==== Bootstrap: load SQL config from secrets.toml (local) or env vars (Azure) ====
 import os
-import streamlit as st
-
-def _load_sql_settings():
-    """
-    1) Try `.streamlit/secrets.toml` -> [azure_sql]
-    2) Fallback to environment variables (Azure App Service)
-    Never throws StreamlitSecretNotFoundError.
-    """
-    try:
-        sec = st.secrets["azure_sql"]  # raises if no secrets.toml or section
-        return {
-            "server":   sec.get("server", ""),
-            "database": sec.get("database", ""),
-            "user":     sec.get("user", ""),
-            "password": sec.get("password", ""),
-        }
-    except Exception:
-        return {
-            "server":   os.getenv("AZURE_SQL_SERVER", ""),
-            "database": os.getenv("AZURE_SQL_DATABASE", ""),
-            "user":     os.getenv("AZURE_SQL_USER", ""),
-            "password": os.getenv("AZURE_SQL_PASSWORD", ""),
-        }
-
-_cfg = _load_sql_settings()
-
-# Normalize for code that reads os.environ
-os.environ.setdefault("AZURE_SQL_SERVER",   _cfg.get("server", ""))
-os.environ.setdefault("AZURE_SQL_DATABASE", _cfg.get("database", ""))
-os.environ.setdefault("AZURE_SQL_USER",     _cfg.get("user", ""))
-os.environ.setdefault("AZURE_SQL_PASSWORD", _cfg.get("password", ""))
-
-# Optional heads-up if anything is missing
-_missing = [k for k, v in {
-    "AZURE_SQL_SERVER":   os.environ.get("AZURE_SQL_SERVER"),
-    "AZURE_SQL_DATABASE": os.environ.get("AZURE_SQL_DATABASE"),
-    "AZURE_SQL_USER":     os.environ.get("AZURE_SQL_USER"),
-    "AZURE_SQL_PASSWORD": os.environ.get("AZURE_SQL_PASSWORD"),
-}.items() if not v]
-if _missing:
-    st.info("ℹ️ SQL settings not fully provided yet: " + ", ".join(_missing))
-# ==== end bootstrap ====
-
-
-# =========================
-# Imports
-# =========================
 import urllib.parse
 from datetime import datetime
 
 import pandas as pd
 import plotly.express as px
+import streamlit as st
 from sqlalchemy import create_engine, text
 
+# =========================
+# Validate required env vars
+# =========================
+REQUIRED_VARS = ["AZURE_SQL_SERVER", "AZURE_SQL_DATABASE", "AZURE_SQL_USER", "AZURE_SQL_PASSWORD"]
+missing = [k for k in REQUIRED_VARS if not os.getenv(k)]
+if missing:
+    st.error(
+        "Missing required Azure App Settings (environment variables): "
+        + ", ".join(missing)
+        + "\n\nAdd them in Azure Portal → App Service → Configuration → Application settings."
+    )
+    st.stop()
 
 # =========================
-# Minimal login gate (uses same SQL creds)
+# Login gate (uses same SQL creds)
 # =========================
 USERNAME = os.getenv("AZURE_SQL_USER", "")
 PASSWORD = os.getenv("AZURE_SQL_PASSWORD", "")
@@ -84,29 +48,14 @@ def login_gate():
 
 login_gate()
 
-
 # =========================
 # DB ENGINE (no ODBC: sqlalchemy-tds + pytds)
 # =========================
 def get_engine():
-    """
-    Azure SQL via TDS (pure Python). No OS ODBC driver required.
-    Needs env vars set by the bootstrap (or Azure App Settings):
-      AZURE_SQL_SERVER, AZURE_SQL_DATABASE, AZURE_SQL_USER, AZURE_SQL_PASSWORD
-    """
     server   = os.getenv("AZURE_SQL_SERVER")
     database = os.getenv("AZURE_SQL_DATABASE")
     user     = os.getenv("AZURE_SQL_USER")
     pwd      = os.getenv("AZURE_SQL_PASSWORD")
-
-    missing = [k for k, v in {
-        "AZURE_SQL_SERVER": server,
-        "AZURE_SQL_DATABASE": database,
-        "AZURE_SQL_USER": user,
-        "AZURE_SQL_PASSWORD": pwd,
-    }.items() if not v]
-    if missing:
-        raise RuntimeError(f"Missing environment variables: {', '.join(missing)}")
 
     url = f"mssql+pytds://{user}:{urllib.parse.quote_plus(pwd)}@{server}:1433/{database}?charset=utf8"
     eng = create_engine(url, pool_pre_ping=True, future=True)
@@ -127,12 +76,10 @@ def sort_pools(pool_list):
     safe = [str(x) for x in pool_list]
     return sorted(safe, key=lambda x: (int("".join(filter(str.isdigit, x)) or 0), x))
 
-
 # =========================
 # Streamlit chrome
 # =========================
 st.set_page_config(page_title="All Pools History Dashboard", layout="wide", initial_sidebar_state="expanded")
-
 st.markdown(
     """
     <style>
@@ -155,11 +102,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.markdown("<h1 class='animated-title'>ALL POOLS HISTORY DASHBOARD</h1>", unsafe_allow_html=True)
-
-today = datetime.today()
-first_of_month = today.replace(day=1).strftime("%B %d, %Y")
+first_of_month = datetime.today().replace(day=1).strftime("%B %d, %Y")
 st.markdown(f"** Data as of {first_of_month}**")
-
 
 # =========================
 # Connectivity Check
@@ -177,12 +121,10 @@ with st.expander("🔌 Connectivity Check (Azure SQL)", expanded=False):
     except Exception as e:
         st.error(f"Connection failed: {e}")
 
-
 # =========================
 # Business switcher
 # =========================
 Business_Types = st.selectbox("Choose Business Type", ("", "SOVEREIGN BUSINESS", "IIS"))
-
 
 # =========================
 # SOVEREIGN BUSINESS
@@ -192,11 +134,9 @@ if Business_Types == "SOVEREIGN BUSINESS":
     @st.cache_data(show_spinner=False)
     def load_sov_from_sql() -> pd.DataFrame:
         df = sql_read("SELECT * FROM dbo.sov;")
-
         for c in ["Premium", "Attachment", "Exhaustion", "Coverage", "Claims"]:
             if c in df.columns:
                 df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
-
         if "Pool" in df.columns:
             df["Pool"] = df["Pool"].astype(str)
             df["Master Pool"] = df["Pool"].str.extract(r"(\d+)")
@@ -379,7 +319,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
                              color_discrete_sequence=colors)
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                pool_column_here = "Pool" if show_sub_pools else "Master Pool"
+                pool_column_here = "Pool" if st.session_state.get("show_sub_pools") else "Master Pool"
                 if pool_column_here not in df_pf.columns:
                     pool_column_here = "Master Pool"
                 melted = df_pf[[pool_column_here] + picked_cols].melt(
@@ -516,7 +456,6 @@ if Business_Types == "SOVEREIGN BUSINESS":
                     if pd.api.types.is_numeric_dtype(export_df[col]):
                         export_df[col] = export_df[col].apply(lambda x: f"{x:,.0f}")
             st.dataframe(export_df)
-
 
 # =========================
 # IIS
