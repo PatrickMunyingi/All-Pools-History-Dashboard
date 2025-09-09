@@ -5,9 +5,8 @@ numpy
 scipy
 matplotlib
 openpyxl
-sqlalchemy
-pyodbc
-streamlit
-plotly
-pandas
+SQLAlchemy>=2
+sqlalchemy-tds
+pytds
 azure-identity
+
