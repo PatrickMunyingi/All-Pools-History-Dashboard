@@ -1,5 +1,5 @@
 # =========================
-# dashboard.py  (Azure env vars only)
+# dashboard.py  (Azure env vars only; no st.secrets)
 # =========================
 import os
 import urllib.parse
@@ -10,22 +10,27 @@ import plotly.express as px
 import streamlit as st
 from sqlalchemy import create_engine, text
 
-# =========================
-# Validate required env vars
-# =========================
+# ---------- Azure App Settings required ----------
 REQUIRED_VARS = ["AZURE_SQL_SERVER", "AZURE_SQL_DATABASE", "AZURE_SQL_USER", "AZURE_SQL_PASSWORD"]
 missing = [k for k in REQUIRED_VARS if not os.getenv(k)]
 if missing:
     st.error(
         "Missing required Azure App Settings (environment variables): "
         + ", ".join(missing)
-        + "\n\nAdd them in Azure Portal → App Service → Configuration → Application settings."
+        + "\nAdd them in Azure Portal → App Service → Configuration → Application settings."
     )
     st.stop()
 
-# =========================
-# Login gate (uses same SQL creds)
-# =========================
+# Debug helper to confirm App Settings are visible at runtime (optional)
+with st.expander("App Settings check"):
+    st.write({
+        "AZURE_SQL_SERVER": os.getenv("AZURE_SQL_SERVER"),
+        "AZURE_SQL_DATABASE": os.getenv("AZURE_SQL_DATABASE"),
+        "AZURE_SQL_USER": os.getenv("AZURE_SQL_USER"),
+        "AZURE_SQL_PASSWORD set?": bool(os.getenv("AZURE_SQL_PASSWORD")),
+    })
+
+# ---------- Minimal login gate reusing same creds ----------
 USERNAME = os.getenv("AZURE_SQL_USER", "")
 PASSWORD = os.getenv("AZURE_SQL_PASSWORD", "")
 
@@ -40,7 +45,7 @@ def login_gate():
             st.session_state["authed_user"] = u
             try:
                 st.rerun()
-            except AttributeError:
+            except AttributeError:  # older streamlit
                 st.experimental_rerun()
         else:
             st.sidebar.error("Invalid credentials")
@@ -48,9 +53,10 @@ def login_gate():
 
 login_gate()
 
-# =========================
-# DB ENGINE (no ODBC: sqlalchemy-tds + pytds)
-# =========================
+# ---------- Database engine (pytds) ----------
+# Requires in requirements.txt:
+#   sqlalchemy-tds
+#   python-tds
 def get_engine():
     server   = os.getenv("AZURE_SQL_SERVER")
     database = os.getenv("AZURE_SQL_DATABASE")
@@ -64,6 +70,28 @@ def get_engine():
         c.execute(text("SELECT 1"))
     return eng
 
+# ---- If you'd rather use ODBC/pyodbc instead of pytds, swap to this engine and add 'pyodbc' to requirements ----
+# def get_engine():
+#     import urllib
+#     driver = "ODBC Driver 18 for SQL Server"
+#     server   = os.getenv("AZURE_SQL_SERVER")
+#     database = os.getenv("AZURE_SQL_DATABASE")
+#     user     = os.getenv("AZURE_SQL_USER")
+#     pwd      = os.getenv("AZURE_SQL_PASSWORD")
+#     odbc_str = (
+#         f"DRIVER={{{driver}}};"
+#         f"SERVER={server};"
+#         f"DATABASE={database};"
+#         f"UID={user};PWD={pwd};"
+#         "Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+#     )
+#     params = urllib.parse.quote_plus(odbc_str)
+#     url = f"mssql+pyodbc:///?odbc_connect={params}"
+#     eng = create_engine(url, fast_executemany=True, pool_pre_ping=True, future=True)
+#     with eng.connect() as c:
+#         c.execute(text("SELECT 1"))
+#     return eng
+
 @st.cache_resource(show_spinner=False)
 def cached_engine():
     return get_engine()
@@ -76,9 +104,7 @@ def sort_pools(pool_list):
     safe = [str(x) for x in pool_list]
     return sorted(safe, key=lambda x: (int("".join(filter(str.isdigit, x)) or 0), x))
 
-# =========================
-# Streamlit chrome
-# =========================
+# ---------- Streamlit UI chrome ----------
 st.set_page_config(page_title="All Pools History Dashboard", layout="wide", initial_sidebar_state="expanded")
 st.markdown(
     """
@@ -105,9 +131,7 @@ st.markdown("<h1 class='animated-title'>ALL POOLS HISTORY DASHBOARD</h1>", unsaf
 first_of_month = datetime.today().replace(day=1).strftime("%B %d, %Y")
 st.markdown(f"** Data as of {first_of_month}**")
 
-# =========================
-# Connectivity Check
-# =========================
+# ---------- Connectivity Check ----------
 with st.expander("🔌 Connectivity Check (Azure SQL)", expanded=False):
     try:
         with cached_engine().connect() as c:
@@ -121,14 +145,10 @@ with st.expander("🔌 Connectivity Check (Azure SQL)", expanded=False):
     except Exception as e:
         st.error(f"Connection failed: {e}")
 
-# =========================
-# Business switcher
-# =========================
+# ---------- Business switcher ----------
 Business_Types = st.selectbox("Choose Business Type", ("", "SOVEREIGN BUSINESS", "IIS"))
 
-# =========================
-# SOVEREIGN BUSINESS
-# =========================
+# ---------- SOVEREIGN BUSINESS ----------
 if Business_Types == "SOVEREIGN BUSINESS":
 
     @st.cache_data(show_spinner=False)
@@ -202,7 +222,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
         ("", "Premium and country basic Information", "Premium financing and Tracker", "Claim settlement history"),
     )
 
-    # --- Section 1 ---
+    # Section 1
     if option == "Premium and country basic Information":
         total_premium  = df_selection.get("Premium",  pd.Series(dtype=float)).sum()
         total_claims   = df_selection.get("Claims",   pd.Series(dtype=float)).sum()
@@ -217,7 +237,6 @@ if Business_Types == "SOVEREIGN BUSINESS":
         c5.metric("Number of Policies", f"{num_policies}")
 
         col1, col2, col3 = st.columns(3)
-
         with col1:
             if not df_selection.empty and {"Premium", "Coverage"}.intersection(df_selection.columns):
                 trend_metric = st.radio("Select Metric", ["Premium", "Coverage"], horizontal=True)
@@ -228,7 +247,6 @@ if Business_Types == "SOVEREIGN BUSINESS":
                     pool_trend["__has_suffix"] = pool_trend[pool_column].str.contains(r"[A-Za-z]")
                     ordered = pool_trend.sort_values(["__has_suffix", "__num"])[pool_column].tolist()
                     pool_trend[pool_column] = pd.Categorical(pool_trend[pool_column], categories=ordered, ordered=True)
-
                     fig = px.line(
                         pool_trend.sort_values(pool_column),
                         x=pool_column, y=trend_metric, markers=True,
@@ -267,13 +285,11 @@ if Business_Types == "SOVEREIGN BUSINESS":
                     export_df[col] = export_df[col].apply(lambda x: f"{x:,.0f}")
         st.dataframe(export_df)
 
-    # --- Section 2 ---
+    # Section 2
     elif option == "Premium financing and Tracker":
         mapping = {col: col.replace("Premium Financed by ", "") for col in premium_payers}
-        st.markdown(
-            "### Select Premium Payers",
-            help="Note: For Pools 1–5 there was no Premium Financing. It begins from Pool 6 (2019/2020)."
-        )
+        st.markdown("### Select Premium Payers",
+                    help="Note: For Pools 1–5 there was no Premium Financing. It begins from Pool 6 (2019/2020).")
         select_all = st.checkbox("Select All Premium Payers", value=True)
         picked_display = st.multiselect("Premium Payers", mapping.values(),
                                         default=mapping.values() if select_all else [])
@@ -299,7 +315,6 @@ if Business_Types == "SOVEREIGN BUSINESS":
         c5.metric("Number of Policies", f"{num_policies}")
 
         chart_view = st.radio("Chart Type", ["Donor-Style Summary", "Stacked by Pool"], horizontal=True)
-
         colors = [
             "#e6194B","#3cb44b","#ffe119","#4363d8","#f58231","#911eb4","#46f0f0",
             "#f032e6","#bcf60c","#fabebe","#008080","#e6beff","#9a6324","#fffac8",
@@ -357,7 +372,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
                         export_df[col] = export_df[col].apply(lambda x: f"{x:,.0f}")
             st.dataframe(export_df)
 
-    # --- Section 3 ---
+    # Section 3
     elif option == "Claim settlement history":
         st.subheader("Claim Settlement Overview")
         total_claims = df_selection.get("Claims", pd.Series(dtype=float)).sum()
@@ -371,7 +386,6 @@ if Business_Types == "SOVEREIGN BUSINESS":
         d.metric("Avg Claim (per Claim)", f"US ${avg_claim:,.0f}")
 
         col1, col2, col3 = st.columns(3)
-
         with col1:
             if "Claims" in df_selection.columns:
                 top_pools = df_selection.groupby("Master Pool")["Claims"].sum().sort_values(ascending=False).reset_index()
@@ -411,11 +425,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
             stats["Loss Ratio"] = (stats["Claims"] / stats["Premium"]) * 100
 
             color_scale = {"Claims": "Reds", "Premium": "Blues", "Loss Ratio": "Oranges"}
-            titles = {
-                "Claims": "Total Claims by Country",
-                "Premium": "Total Premium by Country",
-                "Loss Ratio": "Loss Ratio (%) by Country",
-            }
+            titles = {"Claims": "Total Claims by Country", "Premium": "Total Premium by Country", "Loss Ratio": "Loss Ratio (%) by Country"}
             if not stats.empty:
                 fig_map = px.choropleth(
                     stats,
@@ -457,9 +467,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
                         export_df[col] = export_df[col].apply(lambda x: f"{x:,.0f}")
             st.dataframe(export_df)
 
-# =========================
-# IIS
-# =========================
+# ---------- IIS ----------
 if Business_Types == "IIS":
 
     @st.cache_data(show_spinner=False)
@@ -473,7 +481,6 @@ if Business_Types == "IIS":
             "Start Date": "StartDate",
         }
         df = df.rename(columns=rename_map)
-
         for c in ["ARCNetPremium", "FacRePremium", "TotalPayout"]:
             if c in df.columns:
                 df[c] = pd.to_numeric(df[c], errors="coerce")
@@ -487,11 +494,9 @@ if Business_Types == "IIS":
         years = sorted(df["StartDate"].dt.year.dropna().unique()) if "StartDate" in df.columns else []
         all_years = st.checkbox("Select All Years", value=True)
         selected_years = st.multiselect("Select Year", options=years, default=years if all_years else [])
-
         countries = df["Country"].dropna().unique().tolist() if "Country" in df.columns else []
         all_countries = st.checkbox("Select All Countries", value=True)
         selected_country = st.multiselect("Select Country", options=countries, default=countries if all_countries else [])
-
         partners = df["Partner"].dropna().unique().tolist() if "Partner" in df.columns else []
         all_partners = st.checkbox("Select All Partners", value=True)
         selected_partner = st.multiselect("Select Partner", options=partners, default=partners if all_partners else [])
@@ -517,31 +522,29 @@ if Business_Types == "IIS":
     k5.metric("📂 Programmes", num_programmes)
 
     left, right = st.columns(2)
-
     with left:
         st.markdown("### 📈 Premiums vs Payouts by Country")
         needed = {"Country", "ARCNetPremium", "FacRePremium", "TotalPayout"}
-        if needed.issubset(filtered_df.columns):
-            country_agg = filtered_df.groupby("Country")[["ARCNetPremium", "FacRePremium", "TotalPayout"]].sum().reset_index()
+        if needed.issubset(df.columns):
+            country_agg = df.groupby("Country")[["ARCNetPremium", "FacRePremium", "TotalPayout"]].sum().reset_index()
             fig1 = px.bar(country_agg, x="Country", y=["ARCNetPremium", "FacRePremium", "TotalPayout"],
                           barmode="group", title="Premiums vs Payouts by Country")
             st.plotly_chart(fig1, use_container_width=True)
         else:
-            country_agg = pd.DataFrame()
             st.info("Missing expected columns to build the country chart.")
 
     with right:
         st.markdown("### 🏆 Top 5 Partners by ARC Premium")
         needed = {"Partner", "ARCNetPremium"}
-        if needed.issubset(filtered_df.columns):
-            partner_agg = filtered_df.groupby("Partner")["ARCNetPremium"].sum().nlargest(5).reset_index()
+        if needed.issubset(df.columns):
+            partner_agg = df.groupby("Partner")["ARCNetPremium"].sum().nlargest(5).reset_index()
             fig2 = px.bar(partner_agg, x="ARCNetPremium", y="Partner", orientation="h", title="Top 5 Partners")
             st.plotly_chart(fig2, use_container_width=True)
         else:
             st.info("Missing expected columns to build the partner chart.")
 
     st.markdown("### 📋 Country Summary Table")
-    if not country_agg.empty:
+    if 'country_agg' in locals() and not country_agg.empty:
         st.dataframe(country_agg)
         csv = country_agg.to_csv(index=False).encode("utf-8")
         st.download_button("⬇️ Download Summary CSV", data=csv, file_name="iis_country_summary.csv", mime="text/csv")
