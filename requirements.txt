@@ -2,10 +2,6 @@ streamlit
 plotly
 pandas
 numpy
-scipy
-matplotlib
-openpyxl
-SQLAlchemy>=2
+sqlalchemy
 sqlalchemy-tds
 pytds
-azure-identity
