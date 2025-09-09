@@ -9,4 +9,3 @@ SQLAlchemy>=2
 sqlalchemy-tds
 pytds
 azure-identity
-
