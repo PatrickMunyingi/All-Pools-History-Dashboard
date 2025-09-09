@@ -5,3 +5,9 @@ numpy
 scipy
 matplotlib
 openpyxl
+sqlalchemy
+pyodbc
+streamlit
+plotly
+pandas
+azure-identity
