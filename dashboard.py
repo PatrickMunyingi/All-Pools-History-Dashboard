@@ -1,47 +1,64 @@
 # streamlit run app.py
 
+# =========================
+# Imports & Config
+# =========================
 import os, io, time, shutil
+import numpy as np
 import pandas as pd
+import altair as alt
 import plotly.express as px
 from datetime import datetime
 import streamlit as st
 import requests
-from requests.exceptions import RequestException, HTTPError, Timeout
 from openpyxl import load_workbook
 
-# =========================================
-# CONFIG
-# =========================================
-DATA_PATH = "all pools.xlsx"    # <-- path to your workbook
+# --- Paths / sheet names ---
+DATA_PATH ="all pools.xlsx"
 IIS_SHEET = "IIS"
 
-st.set_page_config(page_title="All Pools History Dashboard",
-                   layout="wide",
-                   initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="All Pools History Dashboard",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# =========================================
-# STYLES / HEADER
-# =========================================
-st.markdown("""
+# =========================
+# Global Styles & Header
+# =========================
+st.markdown(
+    """
     <style>
         [data-testid="stHeader"] { height: 0rem; }
         [data-testid="stToolbar"] { display: none; }
-        @keyframes fadeInBounce { 0% {opacity:0; transform: translateY(-20px);}
-                                  50% {opacity:.5; transform: translateY(5px);}
-                                  100% {opacity:1; transform: translateY(0);} }
-        .animated-title { text-align:center; color:#1E90FF; font-size:40px;
-                          font-weight:bold; animation:fadeInBounce 1.5s ease-out; }
+        @keyframes fadeInBounce {
+            0% {opacity: 0; transform: translateY(-20px);}
+            50% {opacity: 0.5; transform: translateY(5px);}
+            100% {opacity: 1; transform: translateY(0);}
+        }
+        .animated-title {
+            text-align: center;
+            color: #1E90FF;
+            font-size: 40px;
+            font-weight: bold;
+            animation: fadeInBounce 1.5s ease-out;
+        }
     </style>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True
+)
 st.markdown("<h1 class='animated-title'>ALL POOLS HISTORY DASHBOARD</h1>", unsafe_allow_html=True)
 first_of_month = datetime.today().replace(day=1).strftime("%B %d, %Y")
 st.markdown(f"** Data as of {first_of_month}**")
 
-# =========================================
-# HELPERS
-# =========================================
+
+
+# =========================
+# Helpers
+# =========================
 def sort_pools(pool_list):
-    return sorted(pool_list, key=lambda x: (int(''.join(filter(str.isdigit, x)) or 0), x))
+    """Natural sort like 1, 2, 3, 10, 10A, 10B."""
+    return sorted(pool_list, key=lambda x: (int(''.join(filter(str.isdigit, str(x))) or 0), str(x)))
 
 @st.cache_data
 def load_data_sov():
@@ -69,11 +86,13 @@ def backup_then_replace_iis_sheet(df: pd.DataFrame, xlsx_path: str, sheet_name: 
     ts = time.strftime("%Y%m%d_%H%M%S")
     backup_path = os.path.splitext(xlsx_path)[0] + f"_BACKUP_{ts}.xlsx"
     shutil.copy2(xlsx_path, backup_path)
-    # remove IIS sheet
+    # remove / create target sheet
     wb = load_workbook(xlsx_path)
     if sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]; wb.remove(ws)
-    wb.create_sheet(sheet_name); wb.save(xlsx_path)
+        ws = wb[sheet_name]
+        wb.remove(ws)
+    wb.create_sheet(sheet_name)
+    wb.save(xlsx_path)
     # write replacement IIS
     with pd.ExcelWriter(xlsx_path, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
         df.to_excel(writer, sheet_name=sheet_name, index=False)
@@ -87,18 +106,19 @@ def pick(df, *cands):
         if key in norm: return norm[key]
     return None
 
-# =========================================
-# APP
-# =========================================
-Business_Types = st.selectbox("Choose Business Type", ("","SOVEREIGN BUSINESS","IIS"))
+# =========================
+# App Selector
+# =========================
+Business_Types = st.selectbox("Choose Business Type", ("", "SOVEREIGN BUSINESS", "IIS"))
 
-# -----------------------------------------
+# =============================================================================
 # SOVEREIGN BUSINESS
-# -----------------------------------------
+# =============================================================================
 if Business_Types == "SOVEREIGN BUSINESS":
     df = load_data_sov()
-    premium_payers = [c for c in df.columns if c.startswith("Premium Financed by")]
+    premium_payers = [c for c in df.columns if str(c).startswith("Premium Financed by")]
 
+    # ---- Sidebar Filters ----
     with st.sidebar.expander("Filters", expanded=True):
         show_sub_pools = st.checkbox("Show Sub-Pools (like 10A, 10B)", value=False)
         pool_column = 'Pool' if show_sub_pools else 'Master Pool'
@@ -128,6 +148,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
         crop_type = st.multiselect("Crop Type:", options=df["Crop Type"].unique(),
                                    default=df["Crop Type"].unique() if select_all_peril else [])
 
+    # ---- Filtered Data ----
     df_selection = df[
         df[pool_column].isin(pool) &
         df['Policy Type'].isin(policy_type) &
@@ -138,130 +159,166 @@ if Business_Types == "SOVEREIGN BUSINESS":
     ]
     num_policies = len(df_selection)
 
-    option = st.selectbox("What would you like to view?",
-                          ("", "Premium and country basic Information", "Premium financing and Tracker", "Claim settlement history"))
+    # ---- View Selection ----
+    option = st.selectbox(
+        "What would you like to view?",
+        ("", "Premium and country basic Information", "Premium financing and Tracker", "Claim settlement history")
+    )
 
-    # --- Section 1
+    # ---------------------------
+    # SECTION 1: Premium & Country
+    # ---------------------------
     if option == "Premium and country basic Information":
         total_premium = df_selection['Premium'].sum()
         total_claims = df_selection['Claims'].sum()
         total_coverage = df_selection['Coverage'].sum()
         loss_ratio = (total_claims / total_premium) * 100 if total_premium > 0 else 0
 
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Total Premium", f"US ${total_premium:,.0f}")
-        col2.metric("Loss Ratio", f"{loss_ratio:.2f}%")
-        col3.metric("Coverage", f"US ${total_coverage:,.0f}")
-        col4.metric("Claims", f"US ${total_claims:,.0f}")
-        col5.metric("Number of Policies", f"{num_policies}")
-
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if not df_selection.empty:
-                trend_metric = st.radio("Select Metric", ["Premium", "Coverage"], horizontal=True)
-                Pool_trend = df_selection.groupby(pool_column)[trend_metric].sum().reset_index()
-                Pool_trend[pool_column] = Pool_trend[pool_column].astype(str)
-                Pool_trend["__num"] = Pool_trend[pool_column].str.extract(r"(\d+)").astype(int)
-                Pool_trend["__has_suffix"] = Pool_trend[pool_column].str.contains(r"[A-Za-z]")
-                ordered_labels = Pool_trend.sort_values(["__has_suffix", "__num"])[pool_column].tolist()
-                Pool_trend[pool_column] = pd.Categorical(Pool_trend[pool_column],
-                                                         categories=ordered_labels, ordered=True)
-                fig1 = px.line(Pool_trend.sort_values([pool_column]),
-                               x=pool_column, y=trend_metric, markers=True,
-                               title=f'Yearly {trend_metric}s Over Time', template='plotly_white',
-                               category_orders={pool_column: ordered_labels})
-                st.plotly_chart(fig1, use_container_width=True)
-        with col2:
-            country_count = df_selection['Country'].value_counts().reset_index()
-            country_count.columns = ['Country','Count']
-            fig2 = px.bar(country_count, x='Count', y='Country', orientation='h', title="Country Count")
-            st.plotly_chart(fig2, use_container_width=True)
-        with col3:
-            policy_type_counts = df_selection['Policy Type'].value_counts().reset_index()
-            policy_type_counts.columns = ['Policy Type','Count']
-            fig3 = px.pie(policy_type_counts, names='Policy Type', values='Count', hole=0.6,
-                          title="Policy Type Distribution")
-            st.plotly_chart(fig3, use_container_width=True)
-
-        st.markdown("### Filtered Data")
-        export_df = df_selection.copy()
-        if 'Rate-On-Line' in export_df:
-            export_df['Rate-On-Line'] = export_df['Rate-On-Line'].apply(lambda x: f"{x:.2%}")
-        if 'Ceding %' in export_df:
-            export_df['Ceding %'] = export_df['Ceding %'].apply(lambda x: f"{x:.2%}")
-        for col in export_df.columns:
-            if col not in ['Rate-On-Line','Ceding %','Premium Loading'] and pd.api.types.is_numeric_dtype(export_df[col]):
-                export_df[col] = export_df[col].apply(lambda x: f"{x:,.0f}")
-        st.dataframe(export_df)
-
-    # --- Section 2
-    elif option == "Premium financing and Tracker":
-        premium_payers = [c for c in df.columns if c.startswith("Premium Financed by")]
-        premium_payers_mapping = {c: c.replace("Premium Financed by ", "") for c in premium_payers}
-        st.markdown("### Select Premium Payers",
-                    help='Note: Pools 1–5 had no premium financing; it began at Pool 6 (2019/2020).')
-        select_all_payers = st.checkbox("Select All Premium Payers", value=True)
-        selected_payers_display = st.multiselect("Premium Payers", premium_payers_mapping.values(),
-                                                 default=premium_payers_mapping.values() if select_all_payers else [])
-        selected_payers = [k for k, v in premium_payers_mapping.items() if v in selected_payers_display]
-
-        if not selected_payers:
-            df_premium_financing = df_selection
-            total_premium = df_premium_financing['Premium'].sum()
-        else:
-            df_premium_financing = df_selection[df_selection[selected_payers].fillna(0).sum(axis=1) > 0]
-            total_premium = df_premium_financing[selected_payers].sum().sum()
-
-        total_claims = df_selection['Claims'].sum()
-        total_coverage = df_selection['Coverage'].sum()
-        loss_ratio = (total_claims / total_premium) * 100 if total_premium > 0 else 0
-
-        c1,c2,c3,c4,c5 = st.columns(5)
-        c1.metric("Total Premium (from Payers)", f"US ${total_premium:,.0f}")
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Total Premium", f"US ${total_premium:,.0f}")
         c2.metric("Loss Ratio", f"{loss_ratio:.2f}%")
         c3.metric("Coverage", f"US ${total_coverage:,.0f}")
         c4.metric("Claims", f"US ${total_claims:,.0f}")
         c5.metric("Number of Policies", f"{num_policies}")
 
-        chart_view = st.radio("Chart Type", ["Donor-Style Summary","Stacked by Pool"], horizontal=True)
-        palette = px.colors.qualitative.Set3
+        col1, col2, col3 = st.columns(3)
 
-        if selected_payers:
+        # Trend by pool
+        with col1:
+            if not df_selection.empty:
+                trend_metric = st.radio("Select Metric", ["Premium", "Coverage"], horizontal=True)
+                pool_trend = df_selection.groupby(pool_column)[trend_metric].sum().reset_index()
+                pool_trend[pool_column] = pool_trend[pool_column].astype(str)
+                pool_trend["__num"] = pool_trend[pool_column].str.extract(r"(\d+)").astype(int)
+                pool_trend["__has_suffix"] = pool_trend[pool_column].str.contains(r"[A-Za-z]")
+                ordered_labels = pool_trend.sort_values(["__has_suffix", "__num"])[pool_column].tolist()
+                pool_trend[pool_column] = pd.Categorical(pool_trend[pool_column], categories=ordered_labels, ordered=True)
+                fig1 = px.line(
+                    pool_trend.sort_values([pool_column]), x=pool_column, y=trend_metric, markers=True,
+                    title=f'Yearly {trend_metric}s Over Time', template='plotly_white',
+                    category_orders={pool_column: ordered_labels}
+                )
+                st.plotly_chart(fig1, use_container_width=True)
+
+        # Country count
+        with col2:
+            country_count = df_selection['Country'].value_counts().reset_index()
+            country_count.columns = ['Country', 'Count']
+            fig2 = px.bar(country_count, x='Count', y='Country', orientation='h', title="Country Count")
+            st.plotly_chart(fig2, use_container_width=True)
+
+        # Policy type distribution
+        with col3:
+            policy_type_counts = df_selection['Policy Type'].value_counts().reset_index()
+            policy_type_counts.columns = ['Policy Type', 'Count']
+            fig3 = px.pie(policy_type_counts, names='Policy Type', values='Count', hole=0.6, title="Policy Type Distribution")
+            st.plotly_chart(fig3, use_container_width=True)
+
+        # Table (pretty formatting, guarding missing cols)
+        st.markdown("### Filtered Data")
+        export_df = df_selection.copy()
+        if 'Rate-On-Line' in export_df.columns:
+            export_df['Rate-On-Line'] = pd.to_numeric(export_df['Rate-On-Line'], errors='coerce') \
+                .apply(lambda x: f"{x:.2%}" if pd.notna(x) else "")
+        if 'Ceding %' in export_df.columns:
+            export_df['Ceding %'] = pd.to_numeric(export_df['Ceding %'], errors='coerce') \
+                .apply(lambda x: f"{x:.2%}" if pd.notna(x) else "")
+        for col in export_df.columns:
+            if col not in ['Rate-On-Line', 'Ceding %', 'Premium Loading'] and pd.api.types.is_numeric_dtype(export_df[col]):
+                export_df[col] = export_df[col].apply(lambda x: f"{x:,.0f}")
+        st.dataframe(export_df, use_container_width=True)
+
+    # ---------------------------
+    # SECTION 2: Premium Financing
+    # ---------------------------
+    elif option == "Premium financing and Tracker":
+        mapping = {col: col.replace("Premium Financed by ", "") for col in premium_payers}
+        st.markdown(
+            "### Select Premium Payers",
+            help="Note: Pools 1–5 had no premium financing; it began at Pool 6 (2019/2020)."
+        )
+        select_all = st.checkbox("Select All Premium Payers", value=True)
+        picked_display = st.multiselect("Premium Payers", mapping.values(), default=mapping.values() if select_all else [])
+        picked_cols = [k for k, v in mapping.items() if v in picked_display]
+
+        if not picked_cols:
+            df_pf = df_selection
+            total_prem = df_pf.get("Premium", pd.Series(dtype=float)).sum()
+        else:
+            mask = df_selection[picked_cols].fillna(0).sum(axis=1) > 0
+            df_pf = df_selection[mask]
+            total_prem = df_pf[picked_cols].sum().sum()
+
+        total_claims = df_selection.get("Claims", pd.Series(dtype=float)).sum()
+        total_cov = df_selection.get("Coverage", pd.Series(dtype=float)).sum()
+        loss_ratio = (total_claims / total_prem) * 100 if total_prem > 0 else 0
+
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Total Premium (from Payers)", f"US ${total_prem:,.0f}")
+        c2.metric("Loss Ratio", f"{loss_ratio:.2f}%")
+        c3.metric("Coverage", f"US ${total_cov:,.0f}")
+        c4.metric("Claims", f"US ${total_claims:,.0f}")
+        c5.metric("Number of Policies", f"{num_policies}")
+
+        chart_view = st.radio("Chart Type", ["Donor-Style Summary", "Stacked by Pool"], horizontal=True)
+        distinct_colors = [
+            "#e6194B","#3cb44b","#ffe119","#4363d8","#f58231","#911eb4","#46f0f0",
+            "#f032e6","#bcf60c","#fabebe","#008080","#e6beff","#9a6324","#fffac8",
+            "#800000","#aaffc3","#808000","#ffd8b1","#000075","#808080"
+        ]
+
+        if picked_cols:
             if chart_view == "Donor-Style Summary":
-                df_summary = df_premium_financing[selected_payers].sum().reset_index()
-                df_summary.columns = ['Payer','Amount']
-                df_summary['Payer'] = df_summary['Payer'].map(premium_payers_mapping)
-                df_summary['%'] = (df_summary['Amount'] / df_summary['Amount'].sum()) * 100
-                df_summary['Label'] = df_summary['%'].apply(lambda x: f"{x:.2f}%") + "<br>" + \
-                                      df_summary['Amount'].apply(lambda x: f"${x/1e6:.2f}m")
-                fig = px.bar(df_summary, x='Payer', y='Amount', text='Label', color='Payer',
-                             title='Premium Contribution by Financiers', template='plotly_white',
-                             color_discrete_sequence=palette)
+                s = df_pf[picked_cols].sum().reset_index()
+                s.columns = ["Payer", "Amount"]
+                s["Payer"] = s["Payer"].map(mapping)
+                total = s["Amount"].sum() or 1
+                s["%"] = s["Amount"] / total * 100
+                s["Label"] = s["%"].apply(lambda x: f"{x:.2f}%") + "<br>" + s["Amount"].apply(lambda x: f"${x/1e6:.2f}m")
+                fig = px.bar(
+                    s, x="Payer", y="Amount", text="Label", color="Payer",
+                    title="Premium Contribution by Financiers", template="plotly_white",
+                    color_discrete_sequence=distinct_colors
+                )
                 st.plotly_chart(fig, use_container_width=True)
             else:
-                df_melted = df_premium_financing[[pool_column] + selected_payers] \
-                    .melt(id_vars=pool_column, var_name='Payer', value_name='Amount')
-                df_melted['Payer'] = df_melted['Payer'].map(premium_payers_mapping)
-                all_pools = sort_pools(df[pool_column].unique())
-                all_payers = df_melted['Payer'].unique()
-                full_index = pd.MultiIndex.from_product([all_pools, all_payers],
-                                                        names=[pool_column,"Payer"]).to_frame(index=False)
-                grouped_actual = df_melted.groupby([pool_column,'Payer'], as_index=False)['Amount'].sum()
-                grouped = full_index.merge(grouped_actual, on=[pool_column,'Payer'], how='left').fillna(0)
-                fig = px.bar(grouped, x=pool_column, y='Amount', color='Payer',
-                             title='Premium Payers per Pool (Stacked)', barmode='stack',
-                             text_auto='.2s', template='plotly_white',
-                             color_discrete_sequence=palette)
-                fig.update_layout(xaxis={'categoryorder':'array','categoryarray':all_pools})
+                melted = df_pf[[pool_column] + picked_cols].melt(id_vars=pool_column, var_name="Payer", value_name="Amount")
+                melted["Payer"] = melted["Payer"].map(mapping)
+                all_pools = sort_pools(df[pool_column].dropna().astype(str).unique().tolist()) if pool_column in df.columns else []
+                all_payers = melted["Payer"].unique().tolist()
+                full = pd.MultiIndex.from_product([all_pools, all_payers], names=[pool_column, "Payer"]).to_frame(index=False)
+                grouped_actual = melted.groupby([pool_column, "Payer"], as_index=False)["Amount"].sum()
+                grouped = full.merge(grouped_actual, on=[pool_column, "Payer"], how="left").fillna(0)
+                fig = px.bar(
+                    grouped, x=pool_column, y="Amount", color="Payer",
+                    title="Premium Payers per Pool (Stacked)", barmode="stack",
+                    text_auto=".2s", template="plotly_white", color_discrete_sequence=distinct_colors
+                )
+                fig.update_layout(xaxis={"categoryorder": "array", "categoryarray": all_pools})
                 st.plotly_chart(fig, use_container_width=True)
 
-    # --- Section 3
+            st.markdown("#### Filtered Financing Data")
+            export_df = df_pf.copy()
+            if 'Rate-On-Line' in export_df.columns:
+                export_df['Rate-On-Line'] = pd.to_numeric(export_df['Rate-On-Line'], errors='coerce') \
+                    .apply(lambda x: f"{x:.2%}" if pd.notna(x) else "")
+            if 'Ceding %' in export_df.columns:
+                export_df['Ceding %'] = pd.to_numeric(export_df['Ceding %'], errors='coerce') \
+                    .apply(lambda x: f"{x:.2%}" if pd.notna(x) else "")
+            for col in export_df.columns:
+                if col not in ['Rate-On-Line', 'Ceding %', 'Premium Loading'] and pd.api.types.is_numeric_dtype(export_df[col]):
+                    export_df[col] = export_df[col].apply(lambda x: f"{x:,.0f}")
+            st.dataframe(export_df, use_container_width=True)
+
+    # ---------------------------
+    # SECTION 3: Claims
+    # ---------------------------
     elif option == "Claim settlement history":
         st.subheader("Claim Settlement Overview")
         total_claims = df_selection['Claims'].sum()
         num_claims = df_selection[df_selection["Claims"] > 0].shape[0]
         avg_claim = total_claims / num_claims if num_claims > 0 else 0
-        c1,c2,c3,c4 = st.columns(4)
+        c1, c2, c3, c4 = st.columns(4)
         c1.metric("Total Claims", f"US ${total_claims:,.0f}")
         c2.metric("Number of Policies", f"{num_policies}")
         c3.metric("Number of Claims", f"{num_claims}")
@@ -269,14 +326,16 @@ if Business_Types == "SOVEREIGN BUSINESS":
 
         sorted_all_pools = sort_pools(df[pool_column].unique())
         claims_by_pool = df_selection.groupby(pool_column, as_index=False)["Claims"].sum()
-        claims_by_pool = pd.DataFrame({pool_column:sorted_all_pools}).merge(claims_by_pool, on=pool_column, how="left").fillna(0)
-        claims_by_pool["Avg Trend"] = claims_by_pool["Claims"].expanding().mean()
+        claims_by_pool = pd.DataFrame({pool_column: sorted_all_pools}).merge(claims_by_pool, on=pool_column, how="left").fillna(0)
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            top_pools = df_selection.groupby(pool_column)["Claims"].sum().sort_values(ascending=False).reset_index()
-            fig1 = px.bar(top_pools, x="Claims", y=pool_column, orientation="h",
-                          title="💰 Top 10 Pools by Claims Paid", text="Claims", template="plotly_white", color="Claims")
+            top_pools = df_selection.groupby(pool_column)["Claims"].sum().sort_values(ascending=False).head(10).reset_index()
+            fig1 = px.bar(
+                top_pools, x="Claims", y=pool_column, orientation="h",
+                title="💰 Top 10 Pools by Claims Paid", text="Claims",
+                template="plotly_white", color="Claims"
+            )
             fig1.update_traces(texttemplate='$%{x:,.0f}', textposition='outside')
             st.plotly_chart(fig1, use_container_width=True)
         with col2:
@@ -286,30 +345,92 @@ if Business_Types == "SOVEREIGN BUSINESS":
             st.plotly_chart(fig2, use_container_width=True)
         with col3:
             pool_summary = df_selection.groupby(pool_column).agg({'Claims':'sum','Premium':'sum'}).reset_index()
-            pool_summary["Loss Ratio"] = pool_summary["Claims"]/pool_summary["Premium"]*100
+            pool_summary["Loss Ratio"] = (pool_summary["Claims"]/pool_summary["Premium"]) * 100
             top_loss = pool_summary[pool_summary["Premium"]>0].sort_values("Loss Ratio", ascending=False).head(10)
-            fig3 = px.bar(top_loss, x=pool_column, y="Loss Ratio", title="🔥 Pools with Highest Loss Ratios",
-                          text="Loss Ratio", template="plotly_white", color='Loss Ratio')
+            fig3 = px.bar(
+                top_loss, x=pool_column, y="Loss Ratio",
+                title="🔥 Pools with Highest Loss Ratios", text="Loss Ratio",
+                template="plotly_white", color='Loss Ratio'
+            )
             fig3.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
             fig3.update_layout(yaxis_title="Loss Ratio (%)")
             st.plotly_chart(fig3, use_container_width=True)
 
-# -----------------------------------------
+        # Country choropleth for Claims / Premium / Loss Ratio
+        st.markdown("### 🌍 Country-Level Summary Map")
+        map_metric = st.radio("Select metric:", ["Claims", "Premium", "Loss Ratio"], horizontal=True)
+        country_stats = df_selection.groupby("Country")[["Claims", "Premium"]].sum().reset_index()
+        country_stats = country_stats[country_stats["Premium"] > 0]  # avoid divide by zero noise
+        country_stats["Loss Ratio"] = (country_stats["Claims"] / country_stats["Premium"]) * 100
+        color_scale = {"Claims":"Reds", "Premium":"Blues", "Loss Ratio":"Oranges"}
+        title_map = {"Claims":"Total Claims by Country", "Premium":"Total Premium by Country", "Loss Ratio":"Loss Ratio (%) by Country"}
+
+        if not country_stats.empty:
+            fig_map = px.choropleth(
+                country_stats, locations="Country", locationmode="country names",
+                color=map_metric, hover_name="Country", color_continuous_scale=color_scale[map_metric],
+                title=f"🌍 {title_map[map_metric]}", template="plotly_white"
+            )
+            fig_map.update_geos(showcountries=True, showcoastlines=True, showland=True, fitbounds="locations")
+            fig_map.update_layout(margin={"r":0,"t":50,"l":0,"b":0})
+            st.plotly_chart(fig_map, use_container_width=True)
+        else:
+            st.info("No country-level data available for the selected metric.")
+
+        with st.expander("View Country-Level Table"):
+            st.dataframe(country_stats.sort_values(map_metric, ascending=False), use_container_width=True)
+
+        # Table (pretty)
+        st.markdown("#### Filtered Claim Data")
+        export_df = df_selection.copy()
+        if 'Rate-On-Line' in export_df.columns:
+            export_df['Rate-On-Line'] = pd.to_numeric(export_df['Rate-On-Line'], errors='coerce') \
+                .apply(lambda x: f"{x:.2%}" if pd.notna(x) else "")
+        if 'Ceding %' in export_df.columns:
+            export_df['Ceding %'] = pd.to_numeric(export_df['Ceding %'], errors='coerce') \
+                .apply(lambda x: f"{x:.2%}" if pd.notna(x) else "")
+        for col in export_df.columns:
+            if col not in ['Rate-On-Line', 'Ceding %', 'Premium Loading'] and pd.api.types.is_numeric_dtype(export_df[col]):
+                export_df[col] = export_df[col].apply(lambda x: f"{x:,.0f}")
+        st.dataframe(export_df, use_container_width=True)
+
+# =============================================================================
 # IIS
+# =============================================================================
+# -----------------------------------------
+# IIS — aligned with Sovereign layout
 # -----------------------------------------
 if Business_Types == "IIS":
-    # live editable DataFrame in session
+
+    # ---------- helpers ----------
+    @st.cache_data
+    def load_data_iis():
+        return pd.read_excel(DATA_PATH, sheet_name="IIS")
+
+    def pick(df, *cands):
+        """Return the first existing column matching any candidate (case/space-insensitive)."""
+        norm = {str(c).strip().lower().replace(" ", ""): c for c in df.columns}
+        for cand in cands:
+            key = str(cand).strip().lower().replace(" ", "")
+            if key in norm:
+                return norm[key]
+        return None
+
+    # In-memory editable copy (used by Edit IIS data)
     if "iis_df" not in st.session_state:
         st.session_state.iis_df = load_data_iis().copy()
 
-    option = st.selectbox("What would you like to view?",
-                          ("", "Summary", "Disaster Finder", "Auto-Analysis", "Edit IIS data"))
+    # Sub-section selector (same placement/pattern as Sovereign)
+    iis_option = st.selectbox(
+        "What would you like to view?",
+        ("", "Summary", "Disaster Finder", "Auto-Analysis", "Edit IIS data")
+    )
 
-    # ========= SUMMARY (uses live edited data) =========
-    if option == "Summary":
+    # ========= SUMMARY (same feel as Sovereign) =========
+    if iis_option == "Summary":
         df = st.session_state.iis_df.copy()
 
-        # Column detection (robust)
+        # Robust column detection
         col_country   = pick(df, "Country")
         col_startdate = pick(df, "Start Date", "StartDate")
         col_arc       = pick(df, "ARC Net Premium", "ARCNetPremium")
@@ -318,13 +439,15 @@ if Business_Types == "IIS":
         col_partner   = pick(df, "Other Key Partners", "Partner")
         col_programme = pick(df, "Programme Name")
 
-        if col_arc:    df[col_arc]    = pd.to_numeric(df[col_arc], errors="coerce")
-        if col_fac:    df[col_fac]    = pd.to_numeric(df[col_fac], errors="coerce")
-        if col_payout: df[col_payout] = pd.to_numeric(df[col_payout], errors="coerce")
+        # Coerce types
+        for c in [col_arc, col_fac, col_payout]:
+            if c and c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors="coerce")
         if col_startdate:
             df[col_startdate] = pd.to_datetime(df[col_startdate], errors="coerce")
 
-        with st.sidebar.expander("🔎 Filters", expanded=True):
+        # Sidebar (only for this sub-section)
+        with st.sidebar.expander("Filters", expanded=True):
             if col_startdate:
                 year_list = sorted(df[col_startdate].dt.year.dropna().unique())
                 sel_all_years = st.checkbox("Select All Years", value=True)
@@ -352,12 +475,17 @@ if Business_Types == "IIS":
                 sel_partner = []
                 st.caption("No Partner column found; partner filter disabled.")
 
+        # Apply filters
         mask = pd.Series(True, index=df.index)
-        if col_startdate and sel_years:  mask &= df[col_startdate].dt.year.isin(sel_years)
-        if col_country   and sel_country: mask &= df[col_country].isin(sel_country)
-        if col_partner   and sel_partner: mask &= df[col_partner].isin(sel_partner)
+        if col_startdate and sel_years:
+            mask &= df[col_startdate].dt.year.isin(sel_years)
+        if col_country and sel_country:
+            mask &= df[col_country].isin(sel_country)
+        if col_partner and sel_partner:
+            mask &= df[col_partner].isin(sel_partner)
         filtered_df = df[mask].copy()
 
+        # KPIs
         total_arc = filtered_df[col_arc].sum() if col_arc else 0.0
         total_fac = filtered_df[col_fac].sum() if col_fac else 0.0
         total_payout = filtered_df[col_payout].sum() if col_payout else 0.0
@@ -365,14 +493,15 @@ if Business_Types == "IIS":
         claims_ratio = total_payout / denom
         n_programmes = filtered_df[col_programme].nunique() if col_programme else 0
 
-        st.markdown("## 📊 Inclusive Insurance Business (IIS) Dashboard")
+        st.markdown("## Inclusive Insurance Business (IIS) Dashboard")
         k1, k2, k3, k4, k5 = st.columns(5)
-        k1.metric("💰 ARC Premium", f"${total_arc:,.0f}")
-        k2.metric("🛡️ Facultative Premium", f"${total_fac:,.0f}")
-        k3.metric("📤 Total Payout", f"${total_payout:,.0f}")
-        k4.metric("📊 Claims Ratio", f"{claims_ratio:.2%}")
-        k5.metric("📂 Programmes", n_programmes)
+        k1.metric("ARC Premium", f"${total_arc:,.0f}")
+        k2.metric("Facultative Premium", f"${total_fac:,.0f}")
+        k3.metric("Total Payout", f"${total_payout:,.0f}")
+        k4.metric("Claims Ratio", f"{claims_ratio:.2%}")
+        k5.metric("Programmes", n_programmes)
 
+        # Charts + table (mirrors Sovereign’s pattern)
         if all([col_country, col_arc, col_fac, col_payout]):
             country_agg = (
                 filtered_df.groupby(col_country)[[col_arc, col_fac, col_payout]]
@@ -383,34 +512,61 @@ if Business_Types == "IIS":
                     col_payout: "TotalPayout"
                 })
             )
-            st.markdown("### 📈 Premiums vs Payouts by Country")
-            fig1 = px.bar(country_agg, x="Country",
-                          y=["ARCNetPremium","FacRePremium","TotalPayout"],
-                          barmode="group", title="Premiums vs Payouts by Country")
-            st.plotly_chart(fig1, use_container_width=True)
-            st.markdown("### 📋 Country Summary Table")
+
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("### Premiums vs Payouts by Country")
+                fig1 = px.bar(
+                    country_agg, x="Country",
+                    y=["ARCNetPremium", "FacRePremium", "TotalPayout"],
+                    barmode="group", template="plotly_white"
+                )
+                st.plotly_chart(fig1, use_container_width=True)
+
+            #with c2:
+                # Simple map (optional but aligned with your Sovereign choropleth style)
+                st.markdown("### Country Map")
+                denom2 = (country_agg["ARCNetPremium"] + country_agg["FacRePremium"]).replace(0, pd.NA)
+                country_agg["Claims Ratio (%)"] = (country_agg["TotalPayout"] / denom2) * 100
+                map_metric = st.radio(
+                    "Metric", ["TotalPayout", "ARCNetPremium", "FacRePremium", "Claims Ratio (%)"],
+                    horizontal=True
+                )
+                fig_map = px.choropleth(
+                    country_agg, locations="Country", locationmode="country names",
+                    color=map_metric,
+                    color_continuous_scale="Blues" if map_metric != "Claims Ratio (%)" else "Oranges",
+                    template="plotly_white"
+                )
+                fig_map.update_geos(showcountries=True, showcoastlines=True, fitbounds="locations")
+                fig_map.update_layout(margin=dict(l=0, r=0, t=40, b=0))
+                st.plotly_chart(fig_map, use_container_width=True)
+
+            st.markdown("### Country Summary Table")
             st.dataframe(country_agg)
-            st.download_button("⬇️ Download Summary CSV",
-                               data=country_agg.to_csv(index=False).encode("utf-8"),
-                               file_name="iis_country_summary.csv",
-                               mime="text/csv")
+            st.download_button(
+                "Download Summary CSV",
+                data=country_agg.to_csv(index=False).encode("utf-8"),
+                file_name="iis_country_summary.csv",
+                mime="text/csv"
+            )
         else:
             st.info("Country-level fields not found to build the summary table.")
 
-    # ========= DISASTER FINDER =========
-    if option == "Disaster Finder":
-        st.title("🌍 ReliefWeb Explorer (v1 API)")
-        st.sidebar.header("🔎 Filters")
-        country = st.sidebar.text_input("Country (leave blank for all)", "")
-        disaster_type = st.sidebar.text_input("Disaster Type (e.g., flood, drought)", "")
-        start_date = st.sidebar.date_input("Start Date", datetime(1990,1,1))
-        end_date = st.sidebar.date_input("End Date", datetime.today())
-        limit = st.sidebar.slider("Number of results", 10, 100, 50)
+    # ========= DISASTER FINDER (sidebar only when selected) =========
+    elif iis_option == "Disaster Finder":
+        st.title("ReliefWeb Explorer 🌍")  # keep just one emoji here
 
-        tab1, tab2 = st.tabs(["🌪️ Disasters", "📝 Reports"])
+        with st.sidebar.expander("Filters", expanded=True):
+            country = st.text_input("Country (leave blank for all)", "")
+            disaster_type = st.text_input("Disaster Type (e.g., flood, drought)", "")
+            start_date = st.date_input("Start Date", datetime(1990, 1, 1))
+            end_date = st.date_input("End Date", datetime.today())
+            limit = st.slider("Number of results", 10, 100, 50)
+
+        tab1, tab2 = st.tabs(["Disasters", "Reports"])
 
         with tab1:
-            st.subheader("🌪️ Disaster Events from ReliefWeb")
             try:
                 params = {"appname":"reliefweb-explorer","limit":limit,"profile":"list","sort[]":"date.created:desc"}
                 if country:
@@ -426,33 +582,38 @@ if Business_Types == "IIS":
                     dt = datetime.strptime(date_str, "%Y-%m-%d").date()
                     if disaster_type:
                         types = [t["name"].lower() for t in f.get("type", [])]
-                        if disaster_type.lower() not in types: continue
-                    if not (start_date <= dt <= end_date): continue
+                        if disaster_type.lower() not in types:
+                            continue
+                    if not (start_date <= dt <= end_date):
+                        continue
                     results.append({
-                        "Name":f["name"],
-                        "Type":", ".join(t["name"] for t in f.get("type", [])),
-                        "Country":", ".join(c["name"] for c in f.get("country", [])),
-                        "Date":date_str,
-                        "URL":f["url"]
+                        "Name": f["name"],
+                        "Type": ", ".join(t["name"] for t in f.get("type", [])),
+                        "Country": ", ".join(c["name"] for c in f.get("country", [])),
+                        "Date": date_str,
+                        "URL": f["url"]
                     })
                 if not results:
                     st.info("No disasters match the filters.")
                 else:
                     ddf = pd.DataFrame(results)
                     st.dataframe(ddf, use_container_width=True)
-                    st.download_button("⬇ Download Disasters CSV",
+                    st.download_button(
+                        "Download Disasters CSV",
                         data=ddf.to_csv(index=False).encode("utf-8"),
-                        file_name="reliefweb_disasters.csv", mime="text/csv")
+                        file_name="reliefweb_disasters.csv",
+                        mime="text/csv"
+                    )
             except Exception as e:
-                st.error(f"❌ Failed to fetch disasters: {e}")
+                st.error(f"Failed to fetch disasters: {e}")
 
         with tab2:
-            st.subheader("📝 Reports from ReliefWeb")
             filters = []
             if country:
                 filters.append({"field":"country","value":country.lower().strip()})
-            filters.append({"field":"date.created","range":{"from":start_date.strftime("%Y-%m-%d"),
-                                                            "to":end_date.strftime("%Y-%m-%d")}})
+            filters.append({"field":"date.created","range":
+                            {"from":start_date.strftime("%Y-%m-%d"),
+                             "to":end_date.strftime("%Y-%m-%d")}})
             payload = {"limit":limit,"profile":"lite","filter":{"conditions":filters},
                        "sort":[{"field":"date.created","direction":"desc"}]}
             try:
@@ -469,100 +630,29 @@ if Business_Types == "IIS":
                              "URL":x["fields"]["url"]} for x in reports]
                     ddf = pd.DataFrame(rows)
                     st.dataframe(ddf, use_container_width=True)
-                    st.download_button("⬇ Download CSV",
+                    st.download_button(
+                        "Download Reports CSV",
                         data=ddf.to_csv(index=False).encode("utf-8"),
-                        file_name="reliefweb_reports.csv", mime="text/csv")
+                        file_name="reliefweb_reports.csv",
+                        mime="text/csv"
+                    )
             except Exception as e:
-                st.error(f"❌ Failed to fetch reports: {e}")
+                st.error(f"Failed to fetch reports: {e}")
 
-    # ========= EDIT IIS DATA =========
-    if option == "Edit IIS data":
-        st.subheader("✏️ Edit IIS Data (add/delete columns, cell edits, save)")
-        iis_df = st.session_state.iis_df
+    # ========= AUTO-ANALYSIS (sidebar only when selected) =========
+    elif iis_option == "Auto-Analysis":
 
-        with st.expander("➕ Add a column", expanded=True):
-            new_col = st.text_input("Column name", placeholder="e.g., Portfolio Manager")
-            col_type = st.selectbox("Data type", ["text","number","date"], index=0)
-            default_val = None
-            if col_type == "text":
-                default_val = st.text_input("Default value (optional)")
-            elif col_type == "number":
-                default_val = st.number_input("Default value (optional)", value=0.0, step=1.0)
-            else:
-                default_val = st.date_input("Default value (optional)", value=None)
-            if st.button("Add column"):
-                if not new_col:
-                    st.warning("Please enter a column name.")
-                elif new_col in iis_df.columns:
-                    st.warning(f"'{new_col}' already exists.")
-                else:
-                    if col_type == "date" and default_val is not None:
-                        iis_df[new_col] = pd.to_datetime(default_val)
-                    else:
-                        iis_df[new_col] = default_val
-                    st.session_state.iis_df = iis_df
-                    st.success(f"Added column '{new_col}'.")
-
-        with st.expander("🗑️ Delete columns"):
-            to_delete = st.multiselect("Select columns to delete", options=list(iis_df.columns))
-            if st.button("Delete selected"):
-                if not to_delete:
-                    st.info("No columns selected.")
-                else:
-                    iis_df.drop(columns=to_delete, inplace=True, errors="ignore")
-                    st.session_state.iis_df = iis_df
-                    st.success(f"Deleted: {', '.join(to_delete)}")
-
-        st.markdown("### Preview (editable cells)")
-        edited = st.data_editor(st.session_state.iis_df, num_rows="dynamic", use_container_width=True)
-        st.session_state.iis_df = edited
-
-        st.markdown("### Save your edits (download)")
-        csv_bytes = st.session_state.iis_df.to_csv(index=False).encode("utf-8")
-        st.download_button("⬇️ Download CSV", data=csv_bytes,
-                           file_name="IIS_edited.csv", mime="text/csv")
-
-        xbuf = io.BytesIO()
-        with pd.ExcelWriter(xbuf, engine="xlsxwriter") as writer:
-            st.session_state.iis_df.to_excel(writer, sheet_name=IIS_SHEET, index=False)
-        st.download_button("⬇️ Download Excel", data=xbuf.getvalue(),
-                           file_name="IIS_edited.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-        st.markdown("### 🔐 Save back to main data source")
-        st.caption("Overwrites the IIS sheet in the workbook after creating a timestamped backup.")
-        confirm = st.checkbox("I understand this will replace the IIS sheet in the source file.")
-        save_btn = st.button("Save IIS to workbook")
-        if save_btn:
-            if not confirm:
-                st.warning("Please tick the confirmation box first.")
-            else:
-                try:
-                    backup_path = backup_then_replace_iis_sheet(st.session_state.iis_df, DATA_PATH, IIS_SHEET)
-                    st.success(f"Saved IIS sheet to '{DATA_PATH}'. Backup created: '{backup_path}'")
-                    st.info("If the file is open in Excel/OneDrive lock, close it and try again.")
-                    st.rerun()   # refresh app state after write
-                except PermissionError:
-                    st.error("Permission denied. Is the workbook open or read-only?")
-                except Exception as e:
-                    st.error(f"Failed to write IIS sheet: {e}")
-
-        st.divider()
-        if st.button("🔄 Reload IIS from file"):
-            st.session_state.iis_df = load_data_iis().copy()
-            st.cache_data.clear()
-            st.success("Reloaded IIS from source file.")
-            st.rerun()
-
-    # ========= AUTO-ANALYSIS (placeholder) =========
-    if option == "Auto-Analysis":
-        import streamlit as st
+        # Your existing Seasonal Data Explorer block can be kept as-is.
+        # Just ensure its controls live under st.sidebar so they only appear here.
+        # (No extra emojis needed.)
+        # ---- place your Auto-Analysis code here ----
+    
         import pandas as pd
         import numpy as np
         from datetime import datetime
         import altair as alt
 
-        # ---------------------------
+       
         st.title("Seasonal Data Explorer")
 
         st.markdown(
@@ -954,3 +1044,77 @@ if Business_Types == "IIS":
                 file_name="filtered_rows.csv", mime="text/csv")
 
         st.caption("Tip: If the file is huge, pre-aggregate (daily→monthly) before upload to speed things up.")
+
+
+    # ========= EDIT IIS DATA (no sidebar content) =========
+    elif iis_option == "Edit IIS data":
+        st.subheader("Edit IIS Data")
+        iis_df = st.session_state.iis_df
+
+        with st.expander("Add a column", expanded=True):
+            new_col = st.text_input("Column name", placeholder="e.g., Portfolio Manager")
+            col_type = st.selectbox("Data type", ["text","number","date"], index=0)
+            default_val = None
+            if col_type == "text":
+                default_val = st.text_input("Default value (optional)")
+            elif col_type == "number":
+                default_val = st.number_input("Default value (optional)", value=0.0, step=1.0)
+            else:
+                default_val = st.date_input("Default value (optional)", value=None)
+            if st.button("Add column"):
+                if not new_col:
+                    st.warning("Please enter a column name.")
+                elif new_col in iis_df.columns:
+                    st.warning(f"'{new_col}' already exists.")
+                else:
+                    if col_type == "date" and default_val is not None:
+                        iis_df[new_col] = pd.to_datetime(default_val)
+                    else:
+                        iis_df[new_col] = default_val
+                    st.session_state.iis_df = iis_df
+                    st.success(f"Added column '{new_col}'.")
+
+        with st.expander("Delete columns"):
+            to_delete = st.multiselect("Select columns to delete", options=list(iis_df.columns))
+            if st.button("Delete selected"):
+                if not to_delete:
+                    st.info("No columns selected.")
+                else:
+                    iis_df.drop(columns=to_delete, inplace=True, errors="ignore")
+                    st.session_state.iis_df = iis_df
+                    st.success(f"Deleted: {', '.join(to_delete)}")
+
+        st.markdown("### Preview (editable cells)")
+        edited = st.data_editor(st.session_state.iis_df, num_rows="dynamic", use_container_width=True)
+        st.session_state.iis_df = edited
+
+        st.markdown("### Save your edits (download)")
+        csv_bytes = st.session_state.iis_df.to_csv(index=False).encode("utf-8")
+        st.download_button("Download CSV", data=csv_bytes,
+                           file_name="IIS_edited.csv", mime="text/csv")
+
+        xbuf = io.BytesIO()
+        with pd.ExcelWriter(xbuf, engine="xlsxwriter") as writer:
+            st.session_state.iis_df.to_excel(writer, sheet_name=IIS_SHEET, index=False)
+        st.download_button("Download Excel", data=xbuf.getvalue(),
+                           file_name="IIS_edited.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        st.markdown("### Save back to main data source")
+        st.caption("Overwrites the IIS sheet in the workbook after creating a timestamped backup.")
+        confirm = st.checkbox("I understand this will replace the IIS sheet in the source file.")
+        save_btn = st.button("Save IIS to workbook")
+        if save_btn:
+            if not confirm:
+                st.warning("Please tick the confirmation box first.")
+            else:
+                try:
+                    backup_path = backup_then_replace_iis_sheet(st.session_state.iis_df, DATA_PATH, IIS_SHEET)
+                    st.success(f"Saved IIS sheet to '{DATA_PATH}'. Backup created: '{backup_path}'")
+                    st.info("If the file is open in Excel/OneDrive lock, close it and try again.")
+                    st.rerun()
+                except PermissionError:
+                    st.error("Permission denied. Is the workbook open or read-only?")
+                except Exception as e:
+                    st.error(f"Failed to write IIS sheet: {e}")
+
