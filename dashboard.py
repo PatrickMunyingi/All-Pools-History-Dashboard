@@ -19,8 +19,15 @@ IIS_SHEET = "IIS"
 
 st.set_page_config(
     page_title="All Pools History Dashboard",
-    layout="wide"
+    layout="wide",initial_sidebar_state="expanded"
 )
+st.markdown("""
+<style>
+[data-testid="stHeader"] { height: auto !important; }
+[data-testid="stToolbar"] { display: flex !important; }
+</style>
+""", unsafe_allow_html=True)
+
 
 # =========================
 # Global Styles & Header
@@ -1116,5 +1123,6 @@ if Business_Types == "IIS":
                     st.error("Permission denied. Is the workbook open or read-only?")
                 except Exception as e:
                     st.error(f"Failed to write IIS sheet: {e}")
+
 
 
