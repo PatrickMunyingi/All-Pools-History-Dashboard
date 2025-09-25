@@ -291,7 +291,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
                                default=(df[COL_PERIL].dropna().unique().tolist()
                                         if select_all_peril and COL_PERIL else []))
 
-        # ✅ fix: use select_all_crop_types here (was select_all_peril)
+        #  fix: use select_all_crop_types here (was select_all_peril)
         select_all_crop_types = st.checkbox("Select All Crop Types", value=True)
         crop_type = st.multiselect("Crop Type:",
                                    options=df[COL_CROPTYPE].dropna().unique().tolist() if COL_CROPTYPE else [],
@@ -378,6 +378,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
             country_count.columns = ['Country', 'Number of Policies']
             fig2 = px.bar(country_count, x='Number of Policies', y='Country', orientation='h', title="Policy Count by Country",
                           template='plotly_white')
+            fig2.update_traces(texttemplate='%{x:,.0f}', textposition='outside')
             st.plotly_chart(fig2, use_container_width=True)
 
         # Policy type distribution
@@ -1312,5 +1313,6 @@ if Business_Types == "IIS":
                     st.error("Permission denied. Is the workbook open or read-only?")
                 except Exception as e:
                     st.error(f"Failed to write IIS sheet: {e}")
+
 
 
