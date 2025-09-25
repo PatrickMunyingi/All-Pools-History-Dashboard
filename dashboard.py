@@ -12,22 +12,122 @@ from datetime import datetime
 import streamlit as st
 import requests
 from openpyxl import load_workbook
+# ---- Incident form config ----
+INCIDENTS_CSV = "incidents_log.csv"                  # or "incidents_log.xlsx"
+INCIDENTS_SHEET = "Incidents"                        # used if you switch to Excel writer
+SCREENSHOT_DIR = "incident_screenshots"
+
+os.makedirs(SCREENSHOT_DIR, exist_ok=True)
+
+def _new_incident_id():
+    # e.g., INC-20250925-134522
+    return "INC-" + datetime.now().strftime("%Y%m%d-%H%M%S")
+
+def _save_screenshots(files, incident_id):
+    saved_paths = []
+    for i, f in enumerate(files or []):
+        # keep the original extension
+        name, ext = os.path.splitext(f.name)
+        safe_ext = ext.lower() if ext.lower() in [".png", ".jpg", ".jpeg"] else ".png"
+        out_path = os.path.join(SCREENSHOT_DIR, f"{incident_id}_{i+1}{safe_ext}")
+        with open(out_path, "wb") as out:
+            out.write(f.read())
+        saved_paths.append(out_path)
+    return saved_paths
+
+def _append_incident_row(row_dict):
+    # CSV is simplest; switch to Excel if you prefer
+    df_row = pd.DataFrame([row_dict])
+    if os.path.exists(INCIDENTS_CSV):
+        df_row.to_csv(INCIDENTS_CSV, mode="a", header=False, index=False, encoding="utf-8")
+    else:
+        df_row.to_csv(INCIDENTS_CSV, index=False, encoding="utf-8")
+
+def incident_form_ui():
+    # put this in sidebar (recommended) or anywhere in the page
+    # If your Streamlit version supports st.popover, use it; else fall back to expander.
+    try:
+        pop = st.sidebar.popover("🛠️ Report an Incident")
+        ctx = pop
+    except Exception:
+        # Fallback for older Streamlit
+        ctx = st.sidebar.expander("🛠️ Report an Incident", expanded=False)
+
+    with ctx:
+        with st.form("incident_form"):
+            st.markdown("**Tell us what went wrong. Attach any screenshots.**")
+            colA, colB = st.columns(2)
+            with colA:
+                reporter = st.text_input("Reporter / Team", key="rep")
+                contact  = st.text_input("Contact (email/phone)", key="ctc")
+                system   = st.text_input("Application / Module", key="sys")
+                environment = st.selectbox("Environment", ["Production","Staging","Development","Other"], index=0)
+                severity = st.selectbox("Severity", ["Critical","High","Medium","Low"], index=2)
+            with colB:
+                incident_type = st.selectbox(
+                    "Incident Type",
+                    ["Bug/Error","Data Issue","Performance","UI/UX","Security","Other"], index=0
+                )
+                browser_os = st.text_input("Browser / OS / Version")
+                when_date  = st.date_input("Date", datetime.today().date())
+                when_time  = st.time_input("Time", datetime.now().time())
+
+            title = st.text_input("Short Title / Summary")
+            description = st.text_area("Detailed Description (expected vs actual)")
+            steps = st.text_area("Steps to Reproduce (1, 2, 3...)")
+            impact = st.text_area("Impact (users affected, business impact, etc.)")
+            workaround = st.text_area("Workaround Applied (if any)")
+
+            screenshots = st.file_uploader(
+                "Attach screenshots", type=["png","jpg","jpeg"], accept_multiple_files=True
+            )
+
+            submit = st.form_submit_button("Submit Incident")
+
+        if submit:
+            incident_id = _new_incident_id()
+            img_paths = _save_screenshots(screenshots, incident_id)
+
+            row = {
+                "Incident ID": incident_id,
+                "Date": when_date.isoformat(),
+                "Time": when_time.strftime("%H:%M:%S"),
+                "Reporter": reporter,
+                "Contact": contact,
+                "System": system,
+                "Environment": environment,
+                "Severity": severity,
+                "Incident Type": incident_type,
+                "Title": title,
+                "Description": description,
+                "Steps to Reproduce": steps,
+                "Impact": impact,
+                "Workaround": workaround,
+                "Browser/OS": browser_os,
+                "Screenshot Paths": "; ".join(img_paths),
+                "Created At (UTC)": datetime.utcnow().isoformat(timespec="seconds"),
+                "Status": "Open",
+                "Assigned To": "",
+                "Date Resolved": "",
+                "Resolution / Root Cause": "",
+                "Follow-Up Actions": "",
+            }
+            _append_incident_row(row)
+            st.success(f"Incident **{incident_id}** logged. Thanks!")
+            if img_paths:
+                st.caption(f"Saved {len(img_paths)} attachment(s).")
+
+
 
 # --- Paths / sheet names ---
-DATA_PATH ="all pools.xlsx"
+DATA_PATH = all pools.xlsx"
 IIS_SHEET = "IIS"
 
 st.set_page_config(
     page_title="All Pools History Dashboard",
-    layout="wide",initial_sidebar_state="expanded"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
-st.markdown("""
-<style>
-[data-testid="stHeader"] { height: auto !important; }
-[data-testid="stToolbar"] { display: flex !important; }
-</style>
-""", unsafe_allow_html=True)
-
 
 # =========================
 # Global Styles & Header
@@ -56,6 +156,7 @@ st.markdown(
 st.markdown("<h1 class='animated-title'>ALL POOLS HISTORY DASHBOARD</h1>", unsafe_allow_html=True)
 first_of_month = datetime.today().replace(day=1).strftime("%B %d, %Y")
 st.markdown(f"** Data as of {first_of_month}**")
+incident_form_ui()
 
 
 
@@ -83,6 +184,7 @@ def load_data_sov():
 @st.cache_data
 def load_data_iis():
     return pd.read_excel(DATA_PATH, sheet_name=IIS_SHEET)
+
 
 def backup_then_replace_iis_sheet(df: pd.DataFrame, xlsx_path: str, sheet_name: str = IIS_SHEET):
     """Backs up workbook, then replaces only the IIS sheet with df."""
@@ -122,49 +224,113 @@ Business_Types = st.selectbox("Choose Business Type", ("", "SOVEREIGN BUSINESS",
 # =============================================================================
 if Business_Types == "SOVEREIGN BUSINESS":
     df = load_data_sov()
+    def normalize_columns(df):
+        df = df.copy()
+        df.columns = (
+            df.columns.astype(str)
+            .str.replace('\u00A0', ' ', regex=False)   # NBSP -> space
+            .str.replace(r'\s+', ' ', regex=True)      # collapse spaces
+            .str.strip()
+        )
+        # Alias common variants to the canonical name
+        aliases = {
+            "policyholder": "Policy Holder",
+            "policy_holder": "Policy Holder",
+            "policy holder": "Policy Holder",
+        }
+        lower_map = {c.lower(): c for c in df.columns}
+        for k, target in aliases.items():
+            if k in lower_map and target not in df.columns:
+                df.rename(columns={lower_map[k]: target}, inplace=True)
+        return df
+
+    df = normalize_columns(df)
     premium_payers = [c for c in df.columns if str(c).startswith("Premium Financed by")]
+
+    # Resolve column names robustly
+    COL_POOL        = 'Pool'
+    COL_MASTERPOOL  = 'Master Pool'
+    COL_POLICYTYPE  = pick(df, 'Policy Type', 'PolicyType')
+    COL_COUNTRY     = pick(df, 'Country')
+    COL_REGION      = pick(df, 'Region')
+    COL_PERIL       = pick(df, 'Peril')
+    COL_CROPTYPE    = pick(df, 'Crop Type', 'CropType')
+    COL_POLICYHOLDER= pick(df, 'Policy Holder', 'Policy_Holder', 'PolicyHolder', 'Policy holder')
 
     # ---- Sidebar Filters ----
     with st.sidebar.expander("Filters", expanded=True):
-        show_sub_pools = st.checkbox("Show Sub-Pools (like 10A, 10B)", value=False)
-        pool_column = 'Pool' if show_sub_pools else 'Master Pool'
+        show_sub_pools   = st.checkbox("Show Sub-Pools (like 10A, 10B)", value=False)
+        pool_column      = COL_POOL if show_sub_pools else COL_MASTERPOOL
 
-        sorted_pool_options = sort_pools(df[pool_column].unique())
-        select_all_pools = st.checkbox("Select All Pools", value=True)
+        sorted_pool_options = sort_pools(df[pool_column].astype(str).unique())
+        select_all_pools  = st.checkbox("Select All Pools", value=True)
         pool = st.multiselect("Select Pool:", options=sorted_pool_options,
                               default=sorted_pool_options if select_all_pools else [])
 
         select_all_policy_types = st.checkbox("Select All Policy Types", value=True)
-        policy_type = st.multiselect("Policy Type:", options=df["Policy Type"].unique(),
-                                     default=df["Policy Type"].unique() if select_all_policy_types else [])
+        policy_type = st.multiselect("Policy Type:",
+                                     options=df[COL_POLICYTYPE].dropna().unique().tolist() if COL_POLICYTYPE else [],
+                                     default=(df[COL_POLICYTYPE].dropna().unique().tolist()
+                                              if select_all_policy_types and COL_POLICYTYPE else []))
 
         select_all_countries = st.checkbox("Select All Countries", value=True)
-        country = st.multiselect("Country:", options=df["Country"].unique(),
-                                 default=df["Country"].unique() if select_all_countries else [])
+        country = st.multiselect("Country:",
+                                 options=df[COL_COUNTRY].dropna().unique().tolist() if COL_COUNTRY else [],
+                                 default=(df[COL_COUNTRY].dropna().unique().tolist()
+                                          if select_all_countries and COL_COUNTRY else []))
 
         select_all_regions = st.checkbox("Select All Regions", value=True)
-        region = st.multiselect("Region:", options=df["Region"].unique(),
-                                default=df["Region"].unique() if select_all_regions else [])
+        region = st.multiselect("Region:",
+                                options=df[COL_REGION].dropna().unique().tolist() if COL_REGION else [],
+                                default=(df[COL_REGION].dropna().unique().tolist()
+                                         if select_all_regions and COL_REGION else []))
 
         select_all_peril = st.checkbox("Select All Perils", value=True)
-        peril = st.multiselect("Peril:", options=df["Peril"].unique(),
-                               default=df["Peril"].unique() if select_all_peril else [])
+        peril = st.multiselect("Peril:",
+                               options=df[COL_PERIL].dropna().unique().tolist() if COL_PERIL else [],
+                               default=(df[COL_PERIL].dropna().unique().tolist()
+                                        if select_all_peril and COL_PERIL else []))
 
+        # ✅ fix: use select_all_crop_types here (was select_all_peril)
         select_all_crop_types = st.checkbox("Select All Crop Types", value=True)
-        crop_type = st.multiselect("Crop Type:", options=df["Crop Type"].unique(),
-                                   default=df["Crop Type"].unique() if select_all_peril else [])
+        crop_type = st.multiselect("Crop Type:",
+                                   options=df[COL_CROPTYPE].dropna().unique().tolist() if COL_CROPTYPE else [],
+                                   default=(df[COL_CROPTYPE].dropna().unique().tolist()
+                                            if select_all_crop_types and COL_CROPTYPE else []))
 
-    # ---- Filtered Data ----
-    df_selection = df[
-        df[pool_column].isin(pool) &
-        df['Policy Type'].isin(policy_type) &
-        df['Country'].isin(country) &
-        df['Peril'].isin(peril) &
-        df['Region'].isin(region) &
-        df['Crop Type'].isin(crop_type)
-    ]
+        select_all_policy_holders = st.checkbox("Select All Policy Holders", value=True)
+        policy_options = df[COL_POLICYHOLDER].dropna().astype(str).unique().tolist() if COL_POLICYHOLDER else []
+        policy_holders = st.multiselect("Policy Holder:", options=policy_options,
+                                        default=policy_options if select_all_policy_holders else [])
+
+    # ---- Safe masks (no KeyErrors even if a column is missing) ----
+    mask = (
+        df[pool_column].isin(pool)
+        & (df[COL_POLICYTYPE].isin(policy_type) if COL_POLICYTYPE else True)
+        & (df[COL_COUNTRY].isin(country) if COL_COUNTRY else True)
+        & (df[COL_PERIL].isin(peril) if COL_PERIL else True)
+        & (df[COL_REGION].isin(region) if COL_REGION else True)
+        & (df[COL_CROPTYPE].isin(crop_type) if COL_CROPTYPE else True)
+        & (df[COL_POLICYHOLDER].astype(str).isin(policy_holders) if COL_POLICYHOLDER else True)
+    )
+
+    df_selection = df[mask]
     num_policies = len(df_selection)
 
+    # Optional: let the user know if a key column is missing for this Business Type
+    missing = [name for name, col in {
+        "Policy Type": COL_POLICYTYPE,
+        "Country": COL_COUNTRY,
+        "Region": COL_REGION,
+        "Peril": COL_PERIL,
+        "Crop Type": COL_CROPTYPE,
+        "Policy Holder": COL_POLICYHOLDER,
+    }.items() if not col]
+    if missing:
+        st.info(f"Note: The dataset lacks these fields: {', '.join(missing)}.")
+
+    num_policies = len(df_selection)
+    
     # ---- View Selection ----
     option = st.selectbox(
         "What would you like to view?",
@@ -209,8 +375,9 @@ if Business_Types == "SOVEREIGN BUSINESS":
         # Country count
         with col2:
             country_count = df_selection['Country'].value_counts().reset_index()
-            country_count.columns = ['Country', 'Count']
-            fig2 = px.bar(country_count, x='Count', y='Country', orientation='h', title="Country Count")
+            country_count.columns = ['Country', 'Number of Policies']
+            fig2 = px.bar(country_count, x='Number of Policies', y='Country', orientation='h', title="Policy Count by Country",
+                          template='plotly_white')
             st.plotly_chart(fig2, use_container_width=True)
 
         # Policy type distribution
@@ -266,7 +433,17 @@ if Business_Types == "SOVEREIGN BUSINESS":
         c4.metric("Claims", f"US ${total_claims:,.0f}")
         c5.metric("Number of Policies", f"{num_policies}")
 
-        chart_view = st.radio("Chart Type", ["Donor-Style Summary", "Stacked by Pool"], horizontal=True)
+        chart_view = st.radio(
+                                        "Chart Type",
+                                        [
+                                            "Donor-Style Summary",            # existing
+                                            "Stacked by Pool",                # existing
+                                            "Financing ratio by Country (per Pool)",   
+                                            "Financing ratio by Donor (per Pool)",     
+                                        ],
+                                        horizontal=True
+                                    )
+
         distinct_colors = [
             "#e6194B","#3cb44b","#ffe119","#4363d8","#f58231","#911eb4","#46f0f0",
             "#f032e6","#bcf60c","#fabebe","#008080","#e6beff","#9a6324","#fffac8",
@@ -302,6 +479,8 @@ if Business_Types == "SOVEREIGN BUSINESS":
                 )
                 fig.update_layout(xaxis={"categoryorder": "array", "categoryarray": all_pools})
                 st.plotly_chart(fig, use_container_width=True)
+
+                
 
             st.markdown("#### Filtered Financing Data")
             export_df = df_pf.copy()
@@ -343,33 +522,43 @@ if Business_Types == "SOVEREIGN BUSINESS":
                 template="plotly_white", color="Claims"
             )
             fig1.update_traces(texttemplate='$%{x:,.0f}', textposition='outside')
-            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig1)
         with col2:
-            claims_trend = df_selection.groupby("Policy Years")[["Claims","Premium"]].sum().reset_index()
-            fig2 = px.area(claims_trend, x="Policy Years", y=["Premium","Claims"],
-                           title="Claims vs Premium Over Time", template="plotly_white")
-            st.plotly_chart(fig2, use_container_width=True)
+            if not df_selection.empty:
+                trend_metric = st.radio("Select Metric", ["Premium", "Claims"], horizontal=True)
+                pool_trend = df_selection.groupby(pool_column)[trend_metric].sum().reset_index()
+                pool_trend[pool_column] = pool_trend[pool_column].astype(str)
+                pool_trend["__num"] = pool_trend[pool_column].str.extract(r"(\d+)").astype(int)
+                pool_trend["__has_suffix"] = pool_trend[pool_column].str.contains(r"[A-Za-z]")
+                ordered_labels = pool_trend.sort_values(["__has_suffix", "__num"])[pool_column].tolist()
+                pool_trend[pool_column] = pd.Categorical(pool_trend[pool_column], categories=ordered_labels, ordered=True)
+                fig2 = px.line(
+                    pool_trend.sort_values([pool_column]), x=pool_column, y=trend_metric, markers=True,
+                    title=f'Yearly {trend_metric}s Over Time', template='plotly_white',
+                    category_orders={pool_column: ordered_labels}
+                )
+                st.plotly_chart(fig2, use_container_width=True)
         with col3:
             pool_summary = df_selection.groupby(pool_column).agg({'Claims':'sum','Premium':'sum'}).reset_index()
             pool_summary["Loss Ratio"] = (pool_summary["Claims"]/pool_summary["Premium"]) * 100
             top_loss = pool_summary[pool_summary["Premium"]>0].sort_values("Loss Ratio", ascending=False).head(10)
             fig3 = px.bar(
                 top_loss, x=pool_column, y="Loss Ratio",
-                title="🔥 Pools with Highest Loss Ratios", text="Loss Ratio",
+                title=" Pools with Highest Loss Ratios", text="Loss Ratio",
                 template="plotly_white", color='Loss Ratio'
             )
             fig3.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
             fig3.update_layout(yaxis_title="Loss Ratio (%)")
             st.plotly_chart(fig3, use_container_width=True)
 
-        # Country choropleth for Claims / Premium / Loss Ratio
+        # Country choropleth for Claims / Premium / Loss Ratio /Coverage
         st.markdown("### 🌍 Country-Level Summary Map")
-        map_metric = st.radio("Select metric:", ["Claims", "Premium", "Loss Ratio"], horizontal=True)
-        country_stats = df_selection.groupby("Country")[["Claims", "Premium"]].sum().reset_index()
+        map_metric = st.radio("Select metric:", ["Claims", "Premium", "Loss Ratio","Coverage"], horizontal=True)
+        country_stats = df_selection.groupby("Country")[["Claims", "Premium","Coverage"]].sum().reset_index()
         country_stats = country_stats[country_stats["Premium"] > 0]  # avoid divide by zero noise
         country_stats["Loss Ratio"] = (country_stats["Claims"] / country_stats["Premium"]) * 100
-        color_scale = {"Claims":"Reds", "Premium":"Blues", "Loss Ratio":"Oranges"}
-        title_map = {"Claims":"Total Claims by Country", "Premium":"Total Premium by Country", "Loss Ratio":"Loss Ratio (%) by Country"}
+        color_scale = {"Claims":"Reds", "Premium":"Blues", "Loss Ratio":"Oranges", "Coverage":"Greens"}
+        title_map = {"Claims":"Total Claims by Country", "Premium":"Total Premium by Country", "Loss Ratio":"Loss Ratio (%) by Country", "Coverage":"Total Coverage by Country"}
 
         if not country_stats.empty:
             fig_map = px.choropleth(
@@ -1123,6 +1312,4 @@ if Business_Types == "IIS":
                     st.error("Permission denied. Is the workbook open or read-only?")
                 except Exception as e:
                     st.error(f"Failed to write IIS sheet: {e}")
-
-
 
