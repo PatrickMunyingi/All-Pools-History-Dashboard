@@ -12,113 +12,7 @@ from datetime import datetime
 import streamlit as st
 import requests
 from openpyxl import load_workbook
-import smtplib
-from email.message import EmailMessage
 
-# ---- Incident form config ----
-INCIDENTS_CSV = "incidents_log.csv"                  # or "incidents_log.xlsx"
-INCIDENTS_SHEET = "Incidents"                        # used if you switch to Excel writer
-SCREENSHOT_DIR = "incident_screenshots"
-
-os.makedirs(SCREENSHOT_DIR, exist_ok=True)
-
-def _new_incident_id():
-    # e.g., INC-20250925-134522
-    return "INC-" + datetime.now().strftime("%Y%m%d-%H%M%S")
-
-def _save_screenshots(files, incident_id):
-    saved_paths = []
-    for i, f in enumerate(files or []):
-        # keep the original extension
-        name, ext = os.path.splitext(f.name)
-        safe_ext = ext.lower() if ext.lower() in [".png", ".jpg", ".jpeg"] else ".png"
-        out_path = os.path.join(SCREENSHOT_DIR, f"{incident_id}_{i+1}{safe_ext}")
-        with open(out_path, "wb") as out:
-            out.write(f.read())
-        saved_paths.append(out_path)
-    return saved_paths
-
-def _append_incident_row(row_dict):
-    # CSV is simplest; switch to Excel if you prefer
-    df_row = pd.DataFrame([row_dict])
-    if os.path.exists(INCIDENTS_CSV):
-        df_row.to_csv(INCIDENTS_CSV, mode="a", header=False, index=False, encoding="utf-8")
-    else:
-        df_row.to_csv(INCIDENTS_CSV, index=False, encoding="utf-8")
-
-def incident_form_ui():
-    # put this in sidebar (recommended) or anywhere in the page
-    # If your Streamlit version supports st.popover, use it; else fall back to expander.
-    try:
-        pop = st.sidebar.popover("🛠️ Report an Incident")
-        ctx = pop
-    except Exception:
-        # Fallback for older Streamlit
-        ctx = st.sidebar.expander("🛠️ Report an Incident", expanded=False)
-
-    with ctx:
-        with st.form("incident_form"):
-            st.markdown("**Tell us what went wrong. Attach any screenshots.**")
-            colA, colB = st.columns(2)
-            with colA:
-                reporter = st.text_input("Reporter / Team", key="rep")
-                contact  = st.text_input("Contact (email/phone)", key="ctc")
-                system   = st.text_input("Application / Module", key="sys")
-                environment = st.selectbox("Environment", ["Production","Staging","Development","Other"], index=0)
-                severity = st.selectbox("Severity", ["Critical","High","Medium","Low"], index=2)
-            with colB:
-                incident_type = st.selectbox(
-                    "Incident Type",
-                    ["Bug/Error","Data Issue","Performance","UI/UX","Security","Other"], index=0
-                )
-                browser_os = st.text_input("Browser / OS / Version")
-                when_date  = st.date_input("Date", datetime.today().date())
-                when_time  = st.time_input("Time", datetime.now().time())
-
-            title = st.text_input("Short Title / Summary")
-            description = st.text_area("Detailed Description (expected vs actual)")
-            steps = st.text_area("Steps to Reproduce (1, 2, 3...)")
-            impact = st.text_area("Impact (users affected, business impact, etc.)")
-            workaround = st.text_area("Workaround Applied (if any)")
-
-            screenshots = st.file_uploader(
-                "Attach screenshots", type=["png","jpg","jpeg"], accept_multiple_files=True
-            )
-
-            submit = st.form_submit_button("Submit Incident")
-
-        if submit:
-            incident_id = _new_incident_id()
-            img_paths = _save_screenshots(screenshots, incident_id)
-
-            row = {
-                "Incident ID": incident_id,
-                "Date": when_date.isoformat(),
-                "Time": when_time.strftime("%H:%M:%S"),
-                "Reporter": reporter,
-                "Contact": contact,
-                "System": system,
-                "Environment": environment,
-                "Severity": severity,
-                "Incident Type": incident_type,
-                "Title": title,
-                "Description": description,
-                "Steps to Reproduce": steps,
-                "Impact": impact,
-                "Workaround": workaround,
-                "Browser/OS": browser_os,
-                "Screenshot Paths": "; ".join(img_paths),
-                "Created At (UTC)": datetime.utcnow().isoformat(timespec="seconds"),
-                "Status": "Open",
-                "Assigned To": "",
-                "Date Resolved": "",
-                "Resolution / Root Cause": "",
-                "Follow-Up Actions": "",
-            }
-            _append_incident_row(row)
-            st.success(f"Incident **{incident_id}** logged. Thanks!")
-            if img_paths:
-                st.caption(f"Saved {len(img_paths)} attachment(s).")
 
 
 
@@ -159,7 +53,7 @@ st.markdown(
 st.markdown("<h1 class='animated-title'>ALL POOLS HISTORY DASHBOARD</h1>", unsafe_allow_html=True)
 first_of_month = datetime.today().replace(day=1).strftime("%B %d, %Y")
 st.markdown(f"** Data as of {first_of_month}**")
-incident_form_ui()
+
 
 
 
@@ -1444,4 +1338,5 @@ if Business_Types == "IIS":
                     st.error("Permission denied. Is the workbook open or read-only?")
                 except Exception as e:
                     st.error(f"Failed to write IIS sheet: {e}")
+
 
