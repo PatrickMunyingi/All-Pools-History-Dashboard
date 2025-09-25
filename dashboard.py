@@ -12,6 +12,9 @@ from datetime import datetime
 import streamlit as st
 import requests
 from openpyxl import load_workbook
+import smtplib
+from email.message import EmailMessage
+
 # ---- Incident form config ----
 INCIDENTS_CSV = "incidents_log.csv"                  # or "incidents_log.xlsx"
 INCIDENTS_SHEET = "Incidents"                        # used if you switch to Excel writer
@@ -334,8 +337,89 @@ if Business_Types == "SOVEREIGN BUSINESS":
     # ---- View Selection ----
     option = st.selectbox(
         "What would you like to view?",
-        ("", "Premium and country basic Information", "Premium financing and Tracker", "Claim settlement history")
+        ("","Our FootPrint", "Premium and country basic Information", "Premium financing and Tracker", "Claim settlement history")
     )
+    #----------------------------
+    #Section 0: Our FootPrint
+    #----------------------------
+    #Create Chrolopleth maps
+    if option == "Our FootPrint":
+             # Country choropleth for Claims / Premium / Loss Ratio / Coverage / Number of Policies
+             st.markdown("### 🌍 Country-Level Summary Map")
+             map_metric = st.radio(
+                 "Select metric:",
+                 ["Claims", "Premium", "Loss Ratio", "Coverage", "Number of Policies"],
+                 horizontal=True
+             )
+
+             # --- Base sums per country
+             country_stats = (
+                 df_selection.groupby("Country", as_index=False)[["Claims", "Premium", "Coverage"]]
+                 .sum()
+             )
+
+             # --- Policy counts per country (row count). If you have a unique policy-id column, use nunique on it.
+             # counts = df_selection.groupby("Country")["Policy Ref"].nunique().reset_index(name="Number of Policies")
+             counts = df_selection.groupby("Country").size().reset_index(name="Number of Policies")
+             country_stats = country_stats.merge(counts, on="Country", how="left").fillna({"Number of Policies": 0})
+
+             # --- Loss Ratio (avoid divide-by-zero)
+             country_stats["Loss Ratio"] = np.where(
+                 country_stats["Premium"] > 0,
+                 (country_stats["Claims"] / country_stats["Premium"]) * 100,
+                 np.nan
+             )
+
+             color_scale = {
+                 "Claims": "Reds",
+                 "Premium": "Blues",
+                 "Loss Ratio": "Oranges",
+                 "Coverage": "Greens",
+                 "Number of Policies": "Purples",
+             }
+             title_map = {
+                 "Claims": "Total Claims by Country",
+                 "Premium": "Total Premium by Country",
+                 "Loss Ratio": "Loss Ratio (%) by Country",
+                 "Coverage": "Total Coverage by Country",
+                 "Number of Policies": "Number of Policies by Country",
+             }
+
+             if not country_stats.empty:
+                 fig_map = px.choropleth(
+                     country_stats,
+                     locations="Country",
+                     locationmode="country names",
+                     color=map_metric,
+                     hover_name="Country",
+                     color_continuous_scale=color_scale[map_metric],
+                     title=f"🌍 {title_map[map_metric]}",
+                     template="plotly_white",
+                     scope="africa",
+                 )
+                 # Bigger, cleaner map
+                 fig_map.update_geos(
+                     showcountries=True, countrycolor="#1f1f1f",
+                     showcoastlines=False, showland=True, landcolor="rgba(240,240,240,0.6)",
+                     fitbounds="locations"
+                 )
+                 fig_map.update_layout(
+                     height=1000,width=1000,
+                     margin=dict(l=0, r=0, t=56, b=0),
+                     coloraxis_colorbar=dict(len=0.9, thickness=14)
+                 )
+
+                 st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
+             else:
+                 st.info("No country-level data available for the selected metric.")
+
+             with st.expander("View Country-Level Table"):
+                 st.dataframe(
+                     country_stats.sort_values(map_metric, ascending=False, na_position="last"),
+                     use_container_width=True
+                 )
+
+
 
     # ---------------------------
     # SECTION 1: Premium & Country
@@ -368,7 +452,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
                 fig1 = px.line(
                     pool_trend.sort_values([pool_column]), x=pool_column, y=trend_metric, markers=True,
                     title=f'Yearly {trend_metric}s Over Time', template='plotly_white',
-                    category_orders={pool_column: ordered_labels}
+                    category_orders={pool_column: ordered_labels},labels={pool_column:"Pool", trend_metric: trend_metric}
                 )
                 st.plotly_chart(fig1, use_container_width=True)
 
@@ -439,8 +523,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
                                         [
                                             "Donor-Style Summary",            # existing
                                             "Stacked by Pool",                # existing
-                                            "Financing ratio by Country (per Pool)",   
-                                            "Financing ratio by Donor (per Pool)",     
+                                              
                                         ],
                                         horizontal=True
                                     )
@@ -520,25 +603,95 @@ if Business_Types == "SOVEREIGN BUSINESS":
             fig1 = px.bar(
                 top_pools, x="Claims", y=pool_column, orientation="h",
                 title="💰 Top 10 Pools by Claims Paid", text="Claims",
-                template="plotly_white", color="Claims"
+                template="plotly_white", color="Claims",labels={pool_column:"Pool","Claims": "Claims(USD)"}
             )
             fig1.update_traces(texttemplate='$%{x:,.0f}', textposition='outside')
             st.plotly_chart(fig1)
         with col2:
             if not df_selection.empty:
-                trend_metric = st.radio("Select Metric", ["Premium", "Claims"], horizontal=True)
-                pool_trend = df_selection.groupby(pool_column)[trend_metric].sum().reset_index()
-                pool_trend[pool_column] = pool_trend[pool_column].astype(str)
-                pool_trend["__num"] = pool_trend[pool_column].str.extract(r"(\d+)").astype(int)
-                pool_trend["__has_suffix"] = pool_trend[pool_column].str.contains(r"[A-Za-z]")
-                ordered_labels = pool_trend.sort_values(["__has_suffix", "__num"])[pool_column].tolist()
-                pool_trend[pool_column] = pd.Categorical(pool_trend[pool_column], categories=ordered_labels, ordered=True)
-                fig2 = px.line(
-                    pool_trend.sort_values([pool_column]), x=pool_column, y=trend_metric, markers=True,
-                    title=f'Yearly {trend_metric}s Over Time', template='plotly_white',
-                    category_orders={pool_column: ordered_labels}
+                import re
+                import numpy as np
+                import plotly.graph_objects as go
+
+                # --- Clean numerics (handles "47,000,000", "$60,123,456", etc.)
+                for col in ["Premium", "Claims"]:
+                    if df_selection[col].dtype == "O":
+                        df_selection[col] = (
+                            df_selection[col]
+                            .astype(str)
+                            .str.replace(r"[^\d\.\-]", "", regex=True)  # remove $, commas, spaces
+                        )
+                    df_selection[col] = pd.to_numeric(df_selection[col], errors="coerce").fillna(0)
+
+                # --- Aggregate per pool
+                pool_trend = (
+                    df_selection.groupby(pool_column)[["Premium", "Claims"]]
+                    .sum()
+                    .reset_index()
                 )
+                pool_trend[pool_column] = pool_trend[pool_column].astype(str)
+
+                # --- Order: 10, 10A, 10B…
+                pool_trend["__num"] = pool_trend[pool_column].str.extract(r"(\d+)").astype(float)
+                pool_trend["__has_suffix"] = pool_trend[pool_column].str.contains(r"[A-Za-z]")
+                ordered_labels = (
+                    pool_trend.sort_values(["__num", "__has_suffix"])[pool_column].tolist()
+                )
+                pool_trend[pool_column] = pd.Categorical(
+                    pool_trend[pool_column], categories=ordered_labels, ordered=True
+                )
+                pool_trend = pool_trend.sort_values(pool_column).copy()
+
+                # --- Pretty labels
+                def short(x):
+                    if x is None or np.isnan(x): return "—"
+                    ax = abs(x)
+                    if ax >= 1e9:  return f"{x/1e9:.1f}B"
+                    if ax >= 1e6:  return f"{x/1e6:.0f}M"
+                    if ax >= 1e3:  return f"{x/1e3:.0f}k"
+                    return f"{x:,.0f}"
+
+                # --- Single-axis combo: bars = Premium, line = Claims
+                fig2 = go.Figure()
+
+                fig2.add_bar(
+                    x=pool_trend[pool_column],
+                    y=pool_trend["Premium"],
+                    name="Premium",
+                    marker_color="#1f77b4",
+                    text=[short(v) for v in pool_trend["Premium"]],
+                    textposition="outside",
+                    hovertemplate="<b>%{x}</b><br>Premium: %{y:,.0f}<extra></extra>",
+                )
+
+                fig2.add_trace(
+                    go.Scatter(
+                        x=pool_trend[pool_column],
+                        y=pool_trend["Claims"],
+                        name="Claims",
+                        mode="lines+markers",
+                        marker=dict(size=8),
+                        line=dict(width=3, color="firebrick"),
+                        hovertemplate="<b>%{x}</b><br>Claims: %{y:,.0f}<extra></extra>",
+                    )
+                )
+
+                # --- Layout (shared y-axis for truthful comparison)
+                ymax = float(max(pool_trend["Premium"].max(), pool_trend["Claims"].max()))
+                fig2.update_layout(
+                    template="plotly_white",
+                    title="Premium (bars) & Claims (line) by Pool",
+                    xaxis_title="Pool",
+                    yaxis_title="USD",
+                    yaxis=dict(range=[0, ymax * 1.15]),
+                    legend=dict(orientation="h", y=1.1, x=0),
+                    margin=dict(t=60, b=40),
+                )
+
                 st.plotly_chart(fig2, use_container_width=True)
+
+               
+
         with col3:
             pool_summary = df_selection.groupby(pool_column).agg({'Claims':'sum','Premium':'sum'}).reset_index()
             pool_summary["Loss Ratio"] = (pool_summary["Claims"]/pool_summary["Premium"]) * 100
@@ -546,35 +699,13 @@ if Business_Types == "SOVEREIGN BUSINESS":
             fig3 = px.bar(
                 top_loss, x=pool_column, y="Loss Ratio",
                 title=" Pools with Highest Loss Ratios", text="Loss Ratio",
-                template="plotly_white", color='Loss Ratio'
+                template="plotly_white", color='Loss Ratio',labels={pool_column:"Pool","Loss Ratio": "Loss Ratio (%)"}
             )
             fig3.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
             fig3.update_layout(yaxis_title="Loss Ratio (%)")
             st.plotly_chart(fig3, use_container_width=True)
 
-        # Country choropleth for Claims / Premium / Loss Ratio /Coverage
-        st.markdown("### 🌍 Country-Level Summary Map")
-        map_metric = st.radio("Select metric:", ["Claims", "Premium", "Loss Ratio","Coverage"], horizontal=True)
-        country_stats = df_selection.groupby("Country")[["Claims", "Premium","Coverage"]].sum().reset_index()
-        country_stats = country_stats[country_stats["Premium"] > 0]  # avoid divide by zero noise
-        country_stats["Loss Ratio"] = (country_stats["Claims"] / country_stats["Premium"]) * 100
-        color_scale = {"Claims":"Reds", "Premium":"Blues", "Loss Ratio":"Oranges", "Coverage":"Greens"}
-        title_map = {"Claims":"Total Claims by Country", "Premium":"Total Premium by Country", "Loss Ratio":"Loss Ratio (%) by Country", "Coverage":"Total Coverage by Country"}
-
-        if not country_stats.empty:
-            fig_map = px.choropleth(
-                country_stats, locations="Country", locationmode="country names",
-                color=map_metric, hover_name="Country", color_continuous_scale=color_scale[map_metric],
-                title=f"🌍 {title_map[map_metric]}", template="plotly_white"
-            )
-            fig_map.update_geos(showcountries=True, showcoastlines=True, showland=True, fitbounds="locations")
-            fig_map.update_layout(margin={"r":0,"t":50,"l":0,"b":0})
-            st.plotly_chart(fig_map, use_container_width=True)
-        else:
-            st.info("No country-level data available for the selected metric.")
-
-        with st.expander("View Country-Level Table"):
-            st.dataframe(country_stats.sort_values(map_metric, ascending=False), use_container_width=True)
+        
 
         # Table (pretty)
         st.markdown("#### Filtered Claim Data")
@@ -1313,6 +1444,4 @@ if Business_Types == "IIS":
                     st.error("Permission denied. Is the workbook open or read-only?")
                 except Exception as e:
                     st.error(f"Failed to write IIS sheet: {e}")
-
-
 
