@@ -6,4 +6,3 @@ scipy
 matplotlib
 openpyxl
 xlsxwriter
-smtplib
