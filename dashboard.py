@@ -231,7 +231,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
     # ---- View Selection ----
     option = st.selectbox(
         "What would you like to view?",
-        ("","Our FootPrint", "Premium and country basic Information", "Premium financing and Tracker", "Claim settlement history")
+        ("","Our FootPrint", "Premium and Country Basic Information", "Premium Financing and Tracker", "Claim Settlement History")
     )
     #----------------------------
     #Section 0: Our FootPrint
@@ -318,7 +318,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
     # ---------------------------
     # SECTION 1: Premium & Country
     # ---------------------------
-    if option == "Premium and country basic Information":
+    if option == "Premium and Country Basic Information":
         total_premium = df_selection['Premium'].sum()
         total_claims = df_selection['Claims'].sum()
         total_coverage = df_selection['Coverage'].sum()
@@ -383,7 +383,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
     # ---------------------------
     # SECTION 2: Premium Financing
     # ---------------------------
-    elif option == "Premium financing and Tracker":
+    elif option == "Premium Financing and Tracker":
         mapping = {col: col.replace("Premium Financed by ", "") for col in premium_payers}
         st.markdown(
             "### Select Premium Payers",
@@ -476,7 +476,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
     # ---------------------------
     # SECTION 3: Claims
     # ---------------------------
-    elif option == "Claim settlement history":
+    elif option == "Claim Settlement History":
         st.subheader("Claim Settlement Overview")
         total_claims = df_selection['Claims'].sum()
         num_claims = df_selection[df_selection["Claims"] > 0].shape[0]
@@ -574,7 +574,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
                 ymax = float(max(pool_trend["Premium"].max(), pool_trend["Claims"].max()))
                 fig2.update_layout(
                     template="plotly_white",
-                    title="Premium (bars) & Claims (line) by Pool",
+                    title="Premium & Claims by Pool",
                     xaxis_title="Pool",
                     yaxis_title="USD",
                     yaxis=dict(range=[0, ymax * 1.15]),
@@ -1338,6 +1338,7 @@ if Business_Types == "IIS":
                     st.error("Permission denied. Is the workbook open or read-only?")
                 except Exception as e:
                     st.error(f"Failed to write IIS sheet: {e}")
+
 
 
 
