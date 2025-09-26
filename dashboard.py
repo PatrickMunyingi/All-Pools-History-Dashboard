@@ -1,5 +1,7 @@
 # streamlit run app.py
 
+# streamlit run app.py
+
 # =========================
 # Imports & Config
 # =========================
@@ -17,7 +19,7 @@ from openpyxl import load_workbook
 
 
 # --- Paths / sheet names ---
-DATA_PATH = "all pools.xlsx"
+DATA_PATH = r"C:\\Users\\PatrickMunyingi\\all pools.xlsx"
 IIS_SHEET = "IIS"
 
 st.set_page_config(
@@ -238,80 +240,75 @@ if Business_Types == "SOVEREIGN BUSINESS":
     #----------------------------
     #Create Chrolopleth maps
     if option == "Insurance Footprint Map":
-             # Country choropleth for Claims / Premium / Loss Ratio / Coverage / Number of Policies
             st.markdown(
                 "<span style='font-weight:bold; font-size:18px;'>🌎Visualizing regional activity to track footprint and insurance presence across Africa</span>",
-                    unsafe_allow_html=True
-                    )
+                unsafe_allow_html=True
+            )
+        
+            map_metric = st.radio(  # <-- Line 247
+                "Select metric:",
+                ["Claims", "Premium", "Loss Ratio", "Coverage", "Number of Policies"],
+                horizontal=True
+            )
 
-                 map_metric = st.radio(
-                 "Select metric:",
-                 ["Claims", "Premium", "Loss Ratio", "Coverage", "Number of Policies"],
-                 horizontal=True
-             )
 
              # --- Base sums per country
-             country_stats = (
+            country_stats = (
                  df_selection.groupby("Country", as_index=False)[["Claims", "Premium", "Coverage"]]
                  .sum()
              )
 
              # --- Policy counts per country (row count). If you have a unique policy-id column, use nunique on it.
-             # counts = df_selection.groupby("Country")["Policy Ref"].nunique().reset_index(name="Number of Policies")
-             counts = df_selection.groupby("Country").size().reset_index(name="Number of Policies")
-             country_stats = country_stats.merge(counts, on="Country", how="left").fillna({"Number of Policies": 0})
-
-             # --- Loss Ratio (avoid divide-by-zero)
-             country_stats["Loss Ratio"] = np.where(
-                 country_stats["Premium"] > 0,
-                 (country_stats["Claims"] / country_stats["Premium"]) * 100,
-                 np.nan
-             )
-
-             color_scale = {
-                 "Claims": "Reds",
-                 "Premium": "Blues",
-                 "Loss Ratio": "Oranges",
-                 "Coverage": "Greens",
-                 "Number of Policies": "Purples",
-             }
-             title_map = {
-                 "Claims": "Total Claims by Country",
-                 "Premium": "Total Premium by Country",
-                 "Loss Ratio": "Loss Ratio (%) by Country",
-                 "Coverage": "Total Coverage by Country",
-                 "Number of Policies": "Number of Policies by Country",
-             }
-
-             if not country_stats.empty:
-                 fig_map = px.choropleth(
-                     country_stats,
-                     locations="Country",
-                     locationmode="country names",
-                     color=map_metric,
-                     hover_name="Country",
-                     color_continuous_scale=color_scale[map_metric],
-                     title=f"🌍 {title_map[map_metric]}",
-                     template="plotly_white",
-                     scope="africa",
-                 )
-                 # Bigger, cleaner map
-                 fig_map.update_geos(
-                     showcountries=True, countrycolor="#1f1f1f",
-                     showcoastlines=False, showland=True, landcolor="rgba(240,240,240,0.6)",
-                     fitbounds="locations"
-                 )
-                 fig_map.update_layout(
-                     height=1000,width=1000,
-                     margin=dict(l=0, r=0, t=56, b=0),
-                     coloraxis_colorbar=dict(len=0.9, thickness=14)
-                 )
-
-                 st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
-             else:
-                 st.info("No country-level data available for the selected metric.")
-
-             with st.expander("View Country-Level Table"):
+            # counts = df_selection.groupby("Country")["Policy Ref"].nunique().reset_index(name="Number of Policies")
+            counts = df_selection.groupby("Country").size().reset_index(name="Number of Policies")
+            country_stats = country_stats.merge(counts, on="Country", how="left").fillna({"Number of Policies": 0})
+            # --- Loss Ratio (avoid divide-by-zero)
+            country_stats["Loss Ratio"] = np.where(
+                country_stats["Premium"] > 0,
+                (country_stats["Claims"] / country_stats["Premium"]) * 100,
+                np.nan
+            )
+            color_scale = {
+                "Claims": "Reds",
+                "Premium": "Blues",
+                "Loss Ratio": "Oranges",
+                "Coverage": "Greens",
+                "Number of Policies": "Purples",
+            }
+            title_map = {
+                "Claims": "Total Claims by Country",
+                "Premium": "Total Premium by Country",
+                "Loss Ratio": "Loss Ratio (%) by Country",
+                "Coverage": "Total Coverage by Country",
+                "Number of Policies": "Number of Policies by Country",
+            }
+            if not country_stats.empty:
+                fig_map = px.choropleth(
+                    country_stats,
+                    locations="Country",
+                    locationmode="country names",
+                    color=map_metric,
+                    hover_name="Country",
+                    color_continuous_scale=color_scale[map_metric],
+                    title=f"🌍 {title_map[map_metric]}",
+                    template="plotly_white",
+                    scope="africa",
+                )
+                # Bigger, cleaner map
+                fig_map.update_geos(
+                    showcountries=True, countrycolor="#1f1f1f",
+                    showcoastlines=False, showland=True, landcolor="rgba(240,240,240,0.6)",
+                    fitbounds="locations"
+                )
+                fig_map.update_layout(
+                    height=1000,width=1000,
+                    margin=dict(l=0, r=0, t=56, b=0),
+                    coloraxis_colorbar=dict(len=0.9, thickness=14)
+                )
+                st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
+            else:
+                st.info("No country-level data available for the selected metric.")
+            with st.expander("View Country-Level Table"):
                  st.dataframe(
                      country_stats.sort_values(map_metric, ascending=False, na_position="last"),
                      use_container_width=True
@@ -1342,6 +1339,7 @@ if Business_Types == "IIS":
                     st.error("Permission denied. Is the workbook open or read-only?")
                 except Exception as e:
                     st.error(f"Failed to write IIS sheet: {e}")
+
 
 
 
