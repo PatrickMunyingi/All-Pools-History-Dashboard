@@ -645,7 +645,7 @@ if Business_Types == "IIS":
     # Sub-section selector (same placement/pattern as Sovereign)
     iis_option = st.selectbox(
         "What would you like to view?",
-        ("", "Summary", "Disaster Finder", "Auto-Analysis", "Edit IIS data")
+        ("", "Summary", "Disaster Finder", "Auto-Analysis")
     )
 
     # ========= SUMMARY (same feel as Sovereign) =========
@@ -1268,78 +1268,4 @@ if Business_Types == "IIS":
         st.caption("Tip: If the file is huge, pre-aggregate (daily→monthly) before upload to speed things up.")
 
 
-    # ========= EDIT IIS DATA (no sidebar content) =========
-    elif iis_option == "Edit IIS data":
-        st.subheader("Edit IIS Data")
-        iis_df = st.session_state.iis_df
-
-        with st.expander("Add a column", expanded=True):
-            new_col = st.text_input("Column name", placeholder="e.g., Portfolio Manager")
-            col_type = st.selectbox("Data type", ["text","number","date"], index=0)
-            default_val = None
-            if col_type == "text":
-                default_val = st.text_input("Default value (optional)")
-            elif col_type == "number":
-                default_val = st.number_input("Default value (optional)", value=0.0, step=1.0)
-            else:
-                default_val = st.date_input("Default value (optional)", value=None)
-            if st.button("Add column"):
-                if not new_col:
-                    st.warning("Please enter a column name.")
-                elif new_col in iis_df.columns:
-                    st.warning(f"'{new_col}' already exists.")
-                else:
-                    if col_type == "date" and default_val is not None:
-                        iis_df[new_col] = pd.to_datetime(default_val)
-                    else:
-                        iis_df[new_col] = default_val
-                    st.session_state.iis_df = iis_df
-                    st.success(f"Added column '{new_col}'.")
-
-        with st.expander("Delete columns"):
-            to_delete = st.multiselect("Select columns to delete", options=list(iis_df.columns))
-            if st.button("Delete selected"):
-                if not to_delete:
-                    st.info("No columns selected.")
-                else:
-                    iis_df.drop(columns=to_delete, inplace=True, errors="ignore")
-                    st.session_state.iis_df = iis_df
-                    st.success(f"Deleted: {', '.join(to_delete)}")
-
-        st.markdown("### Preview (editable cells)")
-        edited = st.data_editor(st.session_state.iis_df, num_rows="dynamic", use_container_width=True)
-        st.session_state.iis_df = edited
-
-        st.markdown("### Save your edits (download)")
-        csv_bytes = st.session_state.iis_df.to_csv(index=False).encode("utf-8")
-        st.download_button("Download CSV", data=csv_bytes,
-                           file_name="IIS_edited.csv", mime="text/csv")
-
-        xbuf = io.BytesIO()
-        with pd.ExcelWriter(xbuf, engine="xlsxwriter") as writer:
-            st.session_state.iis_df.to_excel(writer, sheet_name=IIS_SHEET, index=False)
-        st.download_button("Download Excel", data=xbuf.getvalue(),
-                           file_name="IIS_edited.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-        st.markdown("### Save back to main data source")
-        st.caption("Overwrites the IIS sheet in the workbook after creating a timestamped backup.")
-        confirm = st.checkbox("I understand this will replace the IIS sheet in the source file.")
-        save_btn = st.button("Save IIS to workbook")
-        if save_btn:
-            if not confirm:
-                st.warning("Please tick the confirmation box first.")
-            else:
-                try:
-                    backup_path = backup_then_replace_iis_sheet(st.session_state.iis_df, DATA_PATH, IIS_SHEET)
-                    st.success(f"Saved IIS sheet to '{DATA_PATH}'. Backup created: '{backup_path}'")
-                    st.info("If the file is open in Excel/OneDrive lock, close it and try again.")
-                    st.rerun()
-                except PermissionError:
-                    st.error("Permission denied. Is the workbook open or read-only?")
-                except Exception as e:
-                    st.error(f"Failed to write IIS sheet: {e}")
-
-
-
-
+  
