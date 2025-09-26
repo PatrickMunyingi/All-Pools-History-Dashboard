@@ -244,7 +244,7 @@ if Business_Types == "SOVEREIGN BUSINESS":
                     unsafe_allow_html=True
                     )
 
-             map_metric = st.radio(
+                 map_metric = st.radio(
                  "Select metric:",
                  ["Claims", "Premium", "Loss Ratio", "Coverage", "Number of Policies"],
                  horizontal=True
@@ -1342,6 +1342,7 @@ if Business_Types == "IIS":
                     st.error("Permission denied. Is the workbook open or read-only?")
                 except Exception as e:
                     st.error(f"Failed to write IIS sheet: {e}")
+
 
 
 
