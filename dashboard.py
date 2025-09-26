@@ -231,13 +231,13 @@ if Business_Types == "SOVEREIGN BUSINESS":
     # ---- View Selection ----
     option = st.selectbox(
         "What would you like to view?",
-        ("","Our FootPrint", "Premium and Country Basic Information", "Premium Financing and Tracker", "Claim Settlement History")
+        ("","Insurance Footprint Map", "Premium and Country Basic Information", "Premium Financing and Tracker", "Claim Settlement History")
     )
     #----------------------------
     #Section 0: Our FootPrint
     #----------------------------
     #Create Chrolopleth maps
-    if option == "Our FootPrint":
+    if option == "Insurance Footprint Map":
              # Country choropleth for Claims / Premium / Loss Ratio / Coverage / Number of Policies
              st.markdown("### 🌍 Country-Level Summary Map")
              map_metric = st.radio(
@@ -1338,6 +1338,7 @@ if Business_Types == "IIS":
                     st.error("Permission denied. Is the workbook open or read-only?")
                 except Exception as e:
                     st.error(f"Failed to write IIS sheet: {e}")
+
 
 
 
