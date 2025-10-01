@@ -19,7 +19,7 @@ from openpyxl import load_workbook
 
 
 # --- Paths / sheet names ---
-DATA_PATH = r"C:\\Users\\PatrickMunyingi\\all pools.xlsx"
+DATA_PATH = "all pools.xlsx"
 IIS_SHEET = "IIS"
 
 st.set_page_config(
@@ -1339,6 +1339,7 @@ if Business_Types == "IIS":
                     st.error("Permission denied. Is the workbook open or read-only?")
                 except Exception as e:
                     st.error(f"Failed to write IIS sheet: {e}")
+
 
 
 
