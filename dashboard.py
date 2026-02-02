@@ -351,13 +351,18 @@ if Business_Types == "SOVEREIGN BUSINESS":
                 )
                 st.plotly_chart(fig1, use_container_width=True)
 
-        # Country count
         with col2:
-            country_count = df_selection['Country'].value_counts().reset_index()
-            country_count.columns = ['Country', 'Number of Policies']
-            fig2 = px.bar(country_count, x='Number of Policies', y='Country', orientation='h', title="Policy Count by Country",
-                          template='plotly_white')
-            fig2.update_traces(texttemplate='%{x:,.0f}', textposition='outside')
+            country_premium = df_selection.groupby('Country')['Premium'].sum().reset_index()
+            country_premium = country_premium.sort_values('Premium', ascending=False)
+            fig2 =px.bar(country_premium, x="Country", y="Premium", title="Premium by Country", 
+                         template="plotly_white", color="Country",text="Premium")
+            fig2.update_traces(textposition='outside',width=0.6,texttemplate='%{y:,.4s}',hovertemplate='%{x}<br>Premium: %{y:,.4s}')
+            fig2.update_layout(
+                                height=650,
+                                width=800,
+                                yaxis=dict(categoryorder='total ascending'),
+                                showlegend=False,
+                                margin=dict(l=20, r=20, t=60, b=20))
             st.plotly_chart(fig2, use_container_width=True)
 
         # Policy type distribution
@@ -1269,3 +1274,4 @@ if Business_Types == "IIS":
 
 
   
+
